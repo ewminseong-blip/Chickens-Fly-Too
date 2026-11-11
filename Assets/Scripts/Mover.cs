@@ -45,9 +45,9 @@ public class Mover : MonoBehaviour
     [SerializeField] float ringExtraSpeed = 7.65f;
     // W를 뗐을 때 감속(m/s²). 4.5면 15m/s에서 약 3.3초 동안 미끄러지듯 날아감(시즌1은 공기 저항 0이라 계속 날아감).
     [Tooltip("W를 뗐을 때 감속(m/s²). 작을수록 오래 미끄러지듯 날아감")]
-    [SerializeField] float coastDeceleration = 4.5f;
+    [SerializeField] float coastDeceleration = 5.625f;   // 미끄러짐 20% 줄임(미끄러지는 거리는 감속에 반비례 → 4.5 × 1.25)
     [Tooltip("방향을 튼 뒤 옆으로 미끄러지는 속도가 줄어드는 정도(m/s²). 작을수록 더 미끄러짐(얼음 · 관성), 크면 바로 꺾임")]
-    [SerializeField] float slideGrip = 9f;
+    [SerializeField] float slideGrip = 11.25f;   // 미끄러짐 20% 줄임(9 × 1.25)
     // S 브레이크 감속(m/s²). 15m/s에서 약 0.5초 만에 멈춥니다.
     [SerializeField] float brakeDeceleration = 30f;
 

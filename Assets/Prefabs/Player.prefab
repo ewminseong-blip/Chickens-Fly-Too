@@ -667,8 +667,8 @@ MonoBehaviour:
   dashFovKick: 10
   maxBackwardSpeed: 6
   ringExtraSpeed: 7.65
-  coastDeceleration: 4.5
-  slideGrip: 9
+  coastDeceleration: 5.625
+  slideGrip: 11.25
   brakeDeceleration: 30
   maxWindDrift: 8
   windDriftDecay: 10

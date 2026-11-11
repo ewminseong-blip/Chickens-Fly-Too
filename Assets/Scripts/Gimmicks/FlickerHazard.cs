@@ -1,17 +1,20 @@
-using System.Collections;
 using UnityEngine;
 
 // 번개(전기): 노란색 한 가지. 규칙은 하나 — "밝게 켜져 있으면 닿음(죽음), 꺼져 있으면 안 닿음".
 //  - flicker 끔: 늘 켜져 있고 밝기만 지글지글 흔들림(항상 위험)
-//  - flicker 켬: 꺼짐(어두운 가는 흔적, 충돌 없음) → 번쩍번쩍(짧게 켜졌다 꺼짐, 켜진 순간은 위험) → 켜짐(위험) 반복
-// 꺼졌을 때도 가는 흔적은 남겨 '여기서 전기가 친다'는 자리는 보여 줍니다.
+//  - flicker 켬: 고정 박자로 반복 — 꺼짐(offDuration초, 어두운 가는 흔적, 충돌 없음)
+//                → 번쩍번쩍(flashCount번, 켜진 순간은 위험) → 켜짐(onDuration초, 위험)
+//    꺼지는 시간은 번개마다 1초 또는 2초로 고정(랜덤 아님)이라, 박자를 보고 '지나가는 순간'을 노릴 수 있습니다.
+// 박자는 씬 시작 시각 기준으로 계산하므로 몇 번을 다시 해도 같은 타이밍입니다.
 public class FlickerHazard : MonoBehaviour
 {
     [SerializeField] bool flicker = false;
-    [Tooltip("켜져 있는 시간(초, 최소 ~ 최대)")]
-    [SerializeField] Vector2 onTime = new Vector2(0.7f, 1.3f);
-    [Tooltip("꺼져 있는 시간(초, 최소 ~ 최대)")]
-    [SerializeField] Vector2 offTime = new Vector2(0.6f, 1.1f);
+    [Tooltip("꺼져 있는 시간(초, 고정). 이 동안 지나갈 수 있음")]
+    [SerializeField] float offDuration = 1f;
+    [Tooltip("켜져 있는 시간(초, 고정)")]
+    [SerializeField] float onDuration = 1.2f;
+    [Tooltip("박자 시작을 늦추는 시간(초, 고정). 번개마다 다르게 줘서 한꺼번에 꺼지지 않게")]
+    [SerializeField] float startDelay = 0f;
     [Tooltip("켜지기 직전 번쩍이는 횟수")]
     [SerializeField] int flashCount = 2;
     [Tooltip("번쩍임 한 번의 길이(초)")]
@@ -31,8 +34,11 @@ public class FlickerHazard : MonoBehaviour
     Vector3[] fullScales;
     MaterialPropertyBlock block;
     bool lit;
+    bool initialized;
 
     public bool IsLit => lit;
+    public bool Flickers => flicker;
+    public float OffDuration => offDuration;
 
     void Awake()
     {
@@ -50,47 +56,53 @@ public class FlickerHazard : MonoBehaviour
 
     void Start()
     {
-        SetLit(true);
-        if (flicker)
-        {
-            StartCoroutine(Loop());
-        }
+        SetLit(LitAt(Time.timeSinceLevelLoad), true);
     }
 
-    IEnumerator Loop()
+    // 한 주기: [꺼짐 offDuration] [번쩍임 flashCount × (켜짐 flashTime + 꺼짐 flashTime)] [켜짐 onDuration]
+    bool LitAt(float time)
     {
-        // 줄마다 박자가 다르게 처음 한 번 랜덤하게 쉼
-        yield return new WaitForSeconds(Random.Range(0f, onTime.y));
-        while (true)
+        if (!flicker)
         {
-            SetLit(false);
-            yield return new WaitForSeconds(Random.Range(offTime.x, offTime.y));
-            for (int i = 0; i < flashCount; i++)
-            {
-                SetLit(true);
-                yield return new WaitForSeconds(flashTime);
-                SetLit(false);
-                yield return new WaitForSeconds(flashTime);
-            }
-            SetLit(true);
-            yield return new WaitForSeconds(Random.Range(onTime.x, onTime.y));
+            return true;
         }
+        float flashes = flashCount * flashTime * 2f;
+        float cycle = offDuration + flashes + onDuration;
+        float t = Mathf.Repeat(time - startDelay, cycle);
+        if (t < offDuration)
+        {
+            return false;
+        }
+        t -= offDuration;
+        if (t < flashes)
+        {
+            return Mathf.Repeat(t, flashTime * 2f) < flashTime;   // 번쩍: 켜짐 → 꺼짐
+        }
+        return true;
     }
 
     void Update()
     {
-        if (!lit || shimmer <= 0f)
+        bool next = LitAt(Time.timeSinceLevelLoad);
+        if (next != lit)
         {
-            return;
+            SetLit(next, false);
         }
-        // 지글지글: 켜져 있는 동안 밝기가 빠르게 흔들림
-        float k = 1f - shimmer * Random.value;
-        Apply(litColor, litGlow * k);
+        if (lit && shimmer > 0f)
+        {
+            // 지글지글: 켜져 있는 동안 밝기가 빠르게 흔들림
+            Apply(litColor, litGlow * (1f - shimmer * Random.value));
+        }
     }
 
     // 켜짐 = 보이고 닿음, 꺼짐 = 가는 흔적만 남고 안 닿음(보이는 상태와 판정이 언제나 같음)
-    void SetLit(bool on)
+    void SetLit(bool on, bool force)
     {
+        if (!force && initialized && on == lit)
+        {
+            return;
+        }
+        initialized = true;
         lit = on;
         foreach (Collider c in colliders)
         {

@@ -53,10 +53,12 @@ public class StageBuildSettings : ScriptableObject
     [Header("번개 (8스테이지 · 노란색 한 가지, 켜져 있으면 닿음 / 꺼지면 안 닿음)")]
     [Tooltip("번개 중 꺼졌다 켜졌다 번쩍이는 비율(나머지는 늘 켜져 있음)")]
     [Range(0f, 1f)] public float lightningFlickerRatio = 0.3f;
-    [Tooltip("번쩍이는 번개가 켜져 있는 시간(초, 최소 ~ 최대)")]
-    public Vector2 lightningFlickerOn = new Vector2(0.7f, 1.3f);
-    [Tooltip("번쩍이는 번개가 꺼져 있는 시간(초, 최소 ~ 최대)")]
-    public Vector2 lightningFlickerOff = new Vector2(0.6f, 1.1f);
+    [Tooltip("번쩍이는 번개 중 '짧게 꺼지는' 번개의 꺼짐 시간(초, 고정). 짧은 것 · 긴 것을 번갈아 배치")]
+    public float lightningOffShort = 1f;
+    [Tooltip("번쩍이는 번개 중 '길게 꺼지는' 번개의 꺼짐 시간(초, 고정)")]
+    public float lightningOffLong = 2f;
+    [Tooltip("번쩍이는 번개가 켜져 있는 시간(초, 고정)")]
+    public float lightningOnDuration = 1.2f;
 
     [Header("카메라")]
     [Tooltip("닭 기준 카메라 위치(x = 뒤(-), y = 위)")]

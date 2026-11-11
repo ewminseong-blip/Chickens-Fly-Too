@@ -1021,10 +1021,11 @@ public static partial class StageBuilder
     }
 
     static float flickerAccumulator;
+    static int flickerCount;
 
     static void LightningRow(Ctx ctx, float x, float syncSpeed, float phase)
     {
-        if (x < 40f) flickerAccumulator = 0.5f;   // 스테이지 첫 줄에서 초기화(빌드할 때마다 같은 배치)
+        if (x < 40f) { flickerAccumulator = 0.5f; flickerCount = 0; }   // 스테이지 첫 줄에서 초기화(빌드할 때마다 같은 배치)
         Transform g = Group(ctx, $"Lightning_{x:0}");
         float top = ctx.c.VerticalHeight(x);
         float half = ctx.c.Half(x);
@@ -1065,8 +1066,16 @@ public static partial class StageBuilder
             bool flick = flickerAccumulator >= 1f;
             if (flick) flickerAccumulator -= 1f;
             SetField(fh, "flicker", flick);
-            SetField(fh, "onTime", S.lightningFlickerOn);
-            SetField(fh, "offTime", S.lightningFlickerOff);
+            if (flick)
+            {
+                // 꺼지는 시간은 번개마다 고정: 1초 / 2초를 번갈아(랜덤 아님) → 박자를 익혀 지나갈 순간을 노릴 수 있음
+                float off = flickerCount % 2 == 0 ? S.lightningOffShort : S.lightningOffLong;
+                SetField(fh, "offDuration", off);
+                SetField(fh, "onDuration", S.lightningOnDuration);
+                // 번개마다 박자를 조금씩 밀어 한꺼번에 꺼지지 않게(이것도 고정값)
+                SetField(fh, "startDelay", (flickerCount * 0.7f) % (off + S.lightningOnDuration));
+                flickerCount++;
+            }
         }
     }
 

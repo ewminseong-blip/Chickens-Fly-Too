@@ -14,26 +14,32 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp-Editor::StageBuildSettings
   corridorWidth: 24
   corridorHeight: 26
+  deadlyBoundaries: 0
   holeSize: {x: 13, y: 8}
-  movePeriod: {x: 4, y: 2.4}
-  windmillSpeed: {x: 45, y: 110}
-  pendulumPeriod: {x: 3.2, y: 2}
+  crossSpeed: {x: 7, y: 15}
+  crossInterval: {x: 3.5, y: 1.8}
+  driftSpeed: {x: 3, y: 7}
   windLift: {x: 12, y: 20}
   crossWind: {x: 10, y: 16}
-  spearInterval: {x: 0.2, y: 0.1}
+  hailInterval: {x: 0.2, y: 0.1}
   cloudMoveTime: {x: 3, y: 2}
   lightningOff: {x: 1.4, y: 0.9}
   lightningOn: {x: 0.7, y: 1.1}
+  cameraOffset: {x: -10, y: 4.5, z: 0}
+  cameraDamping: {x: 0.8, y: 0.5, z: 0.8}
+  cameraPitch: 10
+  cameraFov: 60
   syncedLightningSpeed: 10
   boostRingSpeed: 15
   bounceLaunchSpeed: 20
-  cloudScale: 5.5
-  pendulumAmplitude: 55
+  cloudScale: 3.6
+  cloudWallScale: {x: 4.5, y: 6.5}
+  atmosphereBlend: 60
   playerJumpForce: 13
   stages:
   - number: 1
     title: First Flap
-    hint: SPACE = FLAP   W = GO   S = STOP
+    hint: SPACE = FLAP   W = GO   S = STOP   MOUSE = TURN
     difficulty: 1
     segments:
     - {x: 30, y: 0}
@@ -64,8 +70,8 @@ MonoBehaviour:
     - {x: 40, y: 15}
     - {x: 25, y: 0}
   - number: 4
-    title: Moving Rocks
-    hint: Watch the rhythm
+    title: Rockfall Ridge
+    hint: Boulders roll, eagles cross
     difficulty: 4
     segments:
     - {x: 20, y: 0}
@@ -75,8 +81,8 @@ MonoBehaviour:
     - {x: 40, y: 0}
     - {x: 30, y: 0}
   - number: 5
-    title: Windmill Clouds
-    hint: Find the gap
+    title: Drifting Clouds
+    hint: Clouds drift, gulls fly
     difficulty: 5
     segments:
     - {x: 20, y: 0}
@@ -87,8 +93,8 @@ MonoBehaviour:
     - {x: 50, y: 15}
     - {x: 30, y: 0}
   - number: 6
-    title: Spear Rain
-    hint: Something falls from above
+    title: Hailstorm
+    hint: Ice falls from above
     difficulty: 6
     segments:
     - {x: 20, y: 0}
@@ -99,8 +105,8 @@ MonoBehaviour:
     - {x: 60, y: 20}
     - {x: 25, y: 0}
   - number: 7
-    title: Above the Clouds
-    hint: Follow the golden rings
+    title: Ride the Tailwind
+    hint: Follow the wind rings
     difficulty: 4.5
     segments:
     - {x: 20, y: 0}
@@ -148,3 +154,4 @@ MonoBehaviour:
     - {x: 50, y: 15}
     - {x: 30, y: 0}
     - {x: 40, y: 0}
+  stagesVersion: 4

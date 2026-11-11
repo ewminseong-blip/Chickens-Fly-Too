@@ -26,7 +26,15 @@ public class Mover : MonoBehaviour
     [SerializeField] float maxYAngle = 45f;
     [SerializeField] float rotationSpeed = 180f;
 
+    [Header("카메라 (Mover 혼자 위치 · 방향을 정함)")]
     [SerializeField] Transform cameraTransform;
+    [Tooltip("진행 방향 기준: x = 뒤(-) / 앞(+), y = 위, z = 옆")]
+    [SerializeField] Vector3 cameraOffset = new Vector3(-10f, 4.5f, 0f);
+    [Tooltip("따라오는 부드러움(초). 작을수록 바로 따라옴")]
+    [SerializeField] float cameraSmoothTime = 0.12f;
+    [Tooltip("내려다보는 각도(°)")]
+    [SerializeField] float cameraPitch = 10f;
+    Vector3 cameraVelocity;
 
     // 체크포인트에서 부활한 직후 공중에 멈춰 있는 시간(초)
     [SerializeField] float respawnHoldTime = 0.5f;
@@ -35,9 +43,6 @@ public class Mover : MonoBehaviour
     // 막힌 동안 누른 날갯짓을 기억하는 시간(초)
     [SerializeField] float flapBufferTime = 0.15f;
     float flapBufferTimer;
-
-    float initialCameraXAngle;
-    float initialCameraZAngle;
 
     Rigidbody playerRigidbody;
 
@@ -86,13 +91,6 @@ public class Mover : MonoBehaviour
         initialXAngle = initialAngles.x;
         initialZAngle = initialAngles.z;
 
-        if (cameraTransform != null)
-        {
-            Vector3 cameraAngles = cameraTransform.eulerAngles;
-            initialCameraXAngle = cameraAngles.x;
-            initialCameraZAngle = cameraAngles.z;
-        }
-
         if (GameSession.HasCheckpoint)
         {
             transform.position = GameSession.CheckpointPosition;
@@ -108,6 +106,30 @@ public class Mover : MonoBehaviour
         }
     }
 
+    void Start()
+    {
+        // 첫 프레임에 카메라를 바로 제자리로(부활 · 시작 때 멀리서 날아오지 않게)
+        if (cameraTransform != null)
+        {
+            cameraTransform.position = CameraTargetPosition();
+            cameraTransform.rotation = CameraTargetRotation();
+        }
+    }
+
+    Vector3 CameraTargetPosition()
+    {
+        Vector3 facing = FacingDirection();
+        Vector3 side = Vector3.Cross(Vector3.up, facing);
+        return transform.position + facing * cameraOffset.x + Vector3.up * cameraOffset.y + side * cameraOffset.z;
+    }
+
+    Quaternion CameraTargetRotation()
+    {
+        return Quaternion.LookRotation(FacingDirection(), Vector3.up) *
+               Quaternion.Euler(cameraPitch, 0f, 0f) *
+               Quaternion.AngleAxis(CameraRoll, Vector3.forward);
+    }
+
     void LateUpdate()
     {
         if (cameraTransform == null)
@@ -115,9 +137,8 @@ public class Mover : MonoBehaviour
             return;
         }
 
-        cameraTransform.rotation =
-            Quaternion.Euler(initialCameraXAngle, currentYAngle, initialCameraZAngle) *
-            Quaternion.AngleAxis(CameraRoll, Vector3.forward);
+        cameraTransform.position = Vector3.SmoothDamp(cameraTransform.position, CameraTargetPosition(), ref cameraVelocity, cameraSmoothTime);
+        cameraTransform.rotation = CameraTargetRotation();
     }
 
     void Update()
@@ -230,6 +251,12 @@ public class Mover : MonoBehaviour
     // W 전진 · S 브레이크 겸 후진 · 좌우는 마우스. 위아래 속도는 건드리지 않습니다.
     void MovePlayer()
     {
+        // 도착 · 사망 연출 중(Kinematic)에는 속도를 건드리지 않습니다.
+        if (playerRigidbody.isKinematic)
+        {
+            return;
+        }
+
         float dt = Time.fixedDeltaTime;
         Vector3 facing = FacingDirection();
         Vector3 velocity = playerRigidbody.linearVelocity;

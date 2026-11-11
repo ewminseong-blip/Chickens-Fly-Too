@@ -1,7 +1,7 @@
 using System.Collections;
 using UnityEngine;
 
-// 떨어지는 창: 플레이어가 이 트리거를 지나면 targets가 delay초 뒤 차례로 떨어집니다.
+// 낙석 · 우박: 플레이어가 이 트리거를 지나면 targets가 delay초 뒤 차례로 떨어집니다.
 // 떨어지기 전에 살짝 흔들려 예고합니다. targets는 Rigidbody 없이 두고 여기서 붙입니다.
 public class DropOnTrigger : PlayerTrigger
 {
@@ -10,6 +10,7 @@ public class DropOnTrigger : PlayerTrigger
     [SerializeField] float interval = 0.15f;     // 다음 창까지 간격
     [SerializeField] float shakeTime = 0.35f;
     [SerializeField] float fallSpeed = 25f;      // 떨어지는 속도(m/s)
+    [SerializeField] float fallDistance = 45f;   // 이만큼 떨어지면 사라짐(m)
 
     bool fired;
 
@@ -53,8 +54,8 @@ public class DropOnTrigger : PlayerTrigger
 
         target.position = start;
 
-        // 바닥(y=0) 아래까지 일정 속도로 떨어집니다.
-        while (target.position.y > -10f)
+        // fallDistance만큼 일정 속도로 떨어진 뒤 사라집니다(높은 곳에서도 같은 길이).
+        while (start.y - target.position.y < fallDistance)
         {
             target.position += Vector3.down * fallSpeed * Time.deltaTime;
             yield return null;

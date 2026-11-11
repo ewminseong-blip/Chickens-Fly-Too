@@ -104,7 +104,10 @@ public class EndingCredits : MonoBehaviour
 
         if (titleText != null)
         {
-            titleText.text = stage != null ? $"STAGE {stage.StageNumber} CLEAR!" : "Congratulations!";
+            // 하나로 이어진 맵: 마지막 도착 = 전체 클리어
+            titleText.text = HasNextStage()
+                ? (stage != null ? $"STAGE {stage.StageNumber} CLEAR!" : "Congratulations!")
+                : "ALL CLEAR!";
         }
 
         if (distanceText != null && scoreMeter != null)

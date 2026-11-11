@@ -21,8 +21,8 @@ public class StageBuildSettings : ScriptableObject
     public float cloudRoofOffset = 0.3f;
 
     [Header("세이브 포인트(체크포인트)")]
-    [Tooltip("몇 스테이지마다 세이브 포인트를 둘지. 1이면 2 ~ 10스테이지 시작마다, 3이면 4 · 7 · 10스테이지 시작에 하나씩")]
-    [Min(1)] public int checkpointEveryStages = 1;
+    [Tooltip("몇 스테이지마다 세이브 포인트를 둘지. 2면 3 · 5 · 7 · 9스테이지 시작, 1이면 2 ~ 10스테이지 시작마다, 3이면 4 · 7 · 10")]
+    [Min(1)] public int checkpointEveryStages = 2;
     [Tooltip("스테이지 중간 체크포인트도 둘지(기본 끔)")]
     public bool midStageCheckpoints = false;
     [Tooltip("구간이 바뀔 때 폭 · 높이가 서서히 바뀌는 거리(m)")]
@@ -49,6 +49,14 @@ public class StageBuildSettings : ScriptableObject
     public Vector2 lightningOff = new Vector2(1.4f, 0.9f);
     [Tooltip("번개 · 펄서 빛줄기가 켜져 있는 시간(초)")]
     public Vector2 lightningOn = new Vector2(0.7f, 1.1f);
+
+    [Header("번개 (8스테이지 · 노란색 한 가지, 켜져 있으면 닿음 / 꺼지면 안 닿음)")]
+    [Tooltip("번개 중 꺼졌다 켜졌다 번쩍이는 비율(나머지는 늘 켜져 있음)")]
+    [Range(0f, 1f)] public float lightningFlickerRatio = 0.3f;
+    [Tooltip("번쩍이는 번개가 켜져 있는 시간(초, 최소 ~ 최대)")]
+    public Vector2 lightningFlickerOn = new Vector2(0.7f, 1.3f);
+    [Tooltip("번쩍이는 번개가 꺼져 있는 시간(초, 최소 ~ 최대)")]
+    public Vector2 lightningFlickerOff = new Vector2(0.6f, 1.1f);
 
     [Header("카메라")]
     [Tooltip("닭 기준 카메라 위치(x = 뒤(-), y = 위)")]

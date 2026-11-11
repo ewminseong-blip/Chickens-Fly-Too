@@ -17,7 +17,7 @@ MonoBehaviour:
   ceilingWarnDistance: 6
   cloudRoofBelowHeight: 25
   cloudRoofOffset: 0.3
-  checkpointEveryStages: 1
+  checkpointEveryStages: 2
   midStageCheckpoints: 0
   sizeBlend: 25
   holeSize: {x: 13, y: 8}
@@ -30,6 +30,9 @@ MonoBehaviour:
   cloudMoveTime: {x: 3, y: 2}
   lightningOff: {x: 1.4, y: 0.9}
   lightningOn: {x: 0.7, y: 1.1}
+  lightningFlickerRatio: 0.3
+  lightningFlickerOn: {x: 0.7, y: 1.3}
+  lightningFlickerOff: {x: 0.6, y: 1.1}
   cameraOffset: {x: -10, y: 4.5, z: 0}
   cameraDamping: {x: 0.8, y: 0.5, z: 0.8}
   cameraPitch: 10
@@ -38,6 +41,9 @@ MonoBehaviour:
   boostRingSpeed: 19
   bounceLaunchSpeed: 20
   hitShrink: 0.92
+  holeMarkerGlow: 4
+  holeMarkerLight: 6
+  holeMarkerForward: 2.6
   rockfallSpeed: 30
   rockfallAcceleration: 45
   cloudScale: 3.6
@@ -139,7 +145,7 @@ MonoBehaviour:
     - {x: 40, y: 0, z: 0}
   - number: 8
     title: Thunder Storm
-    hint: Don't stop. Never stop.
+    hint: Bright yellow = shock. Dark = safe
     difficulty: 5
     width: 22
     height: 28
@@ -182,4 +188,4 @@ MonoBehaviour:
     - {x: 50, y: 15, z: 0}
     - {x: 30, y: 0, z: -10}
     - {x: 40, y: 0, z: 0}
-  stagesVersion: 9
+  stagesVersion: 10

@@ -30,7 +30,7 @@ public static partial class StageBuilder
     const string FeedbackSettingsPath = "Assets/Resources/FX/FeedbackSettings.asset";
 
     // 스테이지 기본값을 바꾸면 올립니다(설정 에셋의 스테이지 목록을 새 기본값으로 다시 채움).
-    const int StagesVersion = 9;
+    const int StagesVersion = 10;
 
     static StageBuildSettings S;
 

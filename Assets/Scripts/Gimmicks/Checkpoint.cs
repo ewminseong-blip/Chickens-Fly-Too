@@ -26,6 +26,7 @@ public class Checkpoint : PlayerTrigger
         {
             FeedbackFX.Checkpoint(position);
             SetFlagActive();
+            SaveNotice.Show();   // 화면에 "SAVED!"
         }
     }
 

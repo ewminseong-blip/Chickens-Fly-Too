@@ -176,8 +176,8 @@ public static partial class StageBuilder
 
         list.Add(new StageDef
         {
-            // 숨 고르기: 번개가 정신없이 치지만 W를 꾹 누르고 직진하면 지날 때마다 꺼져 있음(속도는 게이트에서 실측)
-            number = 8, title = "Thunder Storm", hint = "Don't stop. Never stop.", difficulty = 5f, zone = "Storm",
+            // 노란 번개 숲: 대부분 늘 켜져 있고 약 30%만 번쩍이며 꺼졌다 켜짐. 밝은 노랑 = 닿음, 어두운 흔적 = 안전
+            number = 8, title = "Thunder Storm", hint = "Bright yellow = shock. Dark = safe", difficulty = 5f, zone = "Storm",
             width = 22f, height = 28f,
             content = ctx =>
             {
@@ -1020,12 +1020,16 @@ public static partial class StageBuilder
         FullTrigger(ctx, $"HazardSyncGate_{x:0}", x, 1f).AddComponent<HazardSyncGate>();
     }
 
+    static float flickerAccumulator;
+
     static void LightningRow(Ctx ctx, float x, float syncSpeed, float phase)
     {
+        if (x < 40f) flickerAccumulator = 0.5f;   // 스테이지 첫 줄에서 초기화(빌드할 때마다 같은 배치)
         Transform g = Group(ctx, $"Lightning_{x:0}");
         float top = ctx.c.VerticalHeight(x);
         float half = ctx.c.Half(x);
-        Material bolt = Mat("Lightning_Bolt", C(1f, 0.97f, 0.85f), 0.9f, C(1f, 0.92f, 0.65f) * 2.2f);
+        // 번개 노란색 한 가지(켜짐 = 밝은 노랑 = 닿음)
+        Material bolt = Mat("Lightning_Bolt", C(1f, 0.86f, 0.1f), 0.9f, C(1f, 0.86f, 0.1f) * 3f);
         List<Transform> bolts = new List<Transform>();
         foreach (float f in new[] { -0.65f, 0f, 0.65f })
         {
@@ -1051,14 +1055,18 @@ public static partial class StageBuilder
             bolts.Add(ZigZag(g, "SheetLightning", pts, bolt, 0.4f));
         }
 
+        // 번개 중 약 lightningFlickerRatio(30%)만 꺼졌다 켜졌다 번쩍이고, 나머지는 늘 켜져 있음.
+        // 판정 규칙은 하나: 밝게 켜져 있으면 닿음, 꺼져서 어두운 흔적이면 안 닿음(FlickerHazard).
         foreach (Transform b in bolts)
         {
-            TimedHazard th = b.gameObject.AddComponent<TimedHazard>();
-            SetField(th, "offTime", syncSpeed > 0f ? 1.0f : R(S.lightningOff, ctx.D01));
-            SetField(th, "warnTime", 0.4f);
-            SetField(th, "onTime", syncSpeed > 0f ? 0.8f : R(S.lightningOn, ctx.D01));
-            SetField(th, "syncSpeed", syncSpeed);
-            SetField(th, "phaseOffset", phase + Random.Range(0f, 0.3f));
+            FlickerHazard fh = b.gameObject.AddComponent<FlickerHazard>();
+            // 랜덤 대신 비율을 쌓아 정확히 lightningFlickerRatio만큼 고르게(30%면 10개 중 3개)
+            flickerAccumulator += S.lightningFlickerRatio;
+            bool flick = flickerAccumulator >= 1f;
+            if (flick) flickerAccumulator -= 1f;
+            SetField(fh, "flicker", flick);
+            SetField(fh, "onTime", S.lightningFlickerOn);
+            SetField(fh, "offTime", S.lightningFlickerOff);
         }
     }
 
@@ -1074,7 +1082,9 @@ public static partial class StageBuilder
             seg.transform.position = (a + b) / 2f;
             seg.transform.rotation = Quaternion.LookRotation(b - a);
             seg.transform.localScale = new Vector3(thickness, thickness, Vector3.Distance(a, b) + thickness);
-            seg.GetComponent<Collider>().isTrigger = true;
+            // 트리거가 아닌 실제 충돌: 트리거는 연속 충돌 검사가 안 돼 빠르게 날면(최고 45m/s) 얇은 번개(0.45m)를 건너뛰어
+            // '닿았는데 안 죽는' 일이 생겼음. 일반 충돌은 닭의 ContinuousDynamic 검사로 확실히 잡힘.
+            seg.GetComponent<Collider>().isTrigger = false;
         }
         return g;
     }

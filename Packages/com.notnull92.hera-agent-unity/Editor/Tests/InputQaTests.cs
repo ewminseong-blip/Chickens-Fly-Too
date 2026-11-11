@@ -1,0 +1,366 @@
+using System;
+using System.Threading.Tasks;
+using HeraAgent.Tools;
+using Newtonsoft.Json.Linq;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+using Object = UnityEngine.Object;
+
+namespace HeraAgent.Tests
+{
+    public static class InputQaTests
+    {
+        [MenuItem("HeraAgent/Tests/InputQa")]
+        public static async void RunTests()
+        {
+            var allPassed = RunContractTests();
+            if (!Application.isPlaying)
+            {
+                if (allPassed)
+                    Debug.Log("[InputQaTests] LIMITS PASSED; Play Mode interaction checks skipped.");
+                else
+                    Debug.LogError("[InputQaTests] LIMITS FAILED; Play Mode interaction checks skipped.");
+                return;
+            }
+
+            var root = new GameObject("HeraInputQaRoot");
+            try
+            {
+                if (EventSystem.current == null)
+                {
+                    var eventSystemGo = new GameObject("EventSystem");
+                    eventSystemGo.transform.SetParent(root.transform, false);
+                    eventSystemGo.AddComponent<EventSystem>();
+                }
+
+                var canvasGo = new GameObject("Canvas", typeof(RectTransform));
+                canvasGo.transform.SetParent(root.transform, false);
+                var canvas = canvasGo.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = short.MaxValue;
+                canvasGo.AddComponent<GraphicRaycaster>();
+                var canvasRect = (RectTransform)canvasGo.transform;
+                canvasRect.sizeDelta = new Vector2(800, 600);
+
+                var buttonGo = new GameObject("TargetButton", typeof(RectTransform));
+                buttonGo.transform.SetParent(canvasGo.transform, false);
+                var buttonRect = (RectTransform)buttonGo.transform;
+                buttonRect.sizeDelta = new Vector2(200, 80);
+                buttonRect.anchoredPosition = Vector2.zero;
+                buttonGo.AddComponent<Image>().color = Color.white;
+                buttonGo.AddComponent<Button>();
+                var probe = buttonGo.AddComponent<InputQaProbe>();
+
+                Canvas.ForceUpdateCanvases();
+                await NextEditorUpdates(3);
+
+                var clickResponse = await InputTool.HandleCommand(new JObject
+                {
+                    ["action"] = "click",
+                    ["path"] = HierarchyPath.Build(buttonGo.transform),
+                    ["settle_frames"] = 0,
+                    ["strict"] = true
+                }) as SuccessResponse;
+                allPassed &= ExpectTrue("click returns success", clickResponse != null);
+                allPassed &= ExpectEqual("pointer down count", 1, probe.PointerDownCount);
+                allPassed &= ExpectEqual("pointer up count", 1, probe.PointerUpCount);
+                allPassed &= ExpectEqual("pointer click count", 1, probe.PointerClickCount);
+
+                var submitResponse = await InputTool.HandleCommand(new JObject
+                {
+                    ["action"] = "submit",
+                    ["path"] = HierarchyPath.Build(buttonGo.transform),
+                    ["settle_frames"] = 0,
+                    ["strict"] = true
+                }) as SuccessResponse;
+                allPassed &= ExpectTrue("submit returns success", submitResponse != null);
+                allPassed &= ExpectEqual("submit count", 1, probe.SubmitCount);
+
+                var scrollResponse = await InputTool.HandleCommand(new JObject
+                {
+                    ["action"] = "scroll",
+                    ["path"] = HierarchyPath.Build(buttonGo.transform),
+                    ["scroll_delta"] = "0,-3",
+                    ["settle_frames"] = 0,
+                    ["strict"] = true
+                }) as SuccessResponse;
+                allPassed &= ExpectTrue("scroll returns success", scrollResponse != null);
+                allPassed &= ExpectEqual("scroll count", 1, probe.ScrollCount);
+
+                var dragResponse = await InputTool.HandleCommand(new JObject
+                {
+                    ["action"] = "drag",
+                    ["path"] = HierarchyPath.Build(buttonGo.transform),
+                    ["to_normalized"] = "0.75,0.5",
+                    ["steps"] = 2,
+                    ["settle_frames"] = 0,
+                    ["strict"] = true
+                }) as SuccessResponse;
+                allPassed &= ExpectTrue("drag returns success", dragResponse != null);
+                allPassed &= ExpectEqual("begin drag count", 1, probe.BeginDragCount);
+                allPassed &= ExpectEqual("drag count", 2, probe.DragCount);
+                allPassed &= ExpectEqual("end drag count", 1, probe.EndDragCount);
+
+                var destroyOnClickGo = new GameObject("DestroyOnClick", typeof(RectTransform));
+                destroyOnClickGo.transform.SetParent(canvasGo.transform, false);
+                var destroyOnClickRect = (RectTransform)destroyOnClickGo.transform;
+                destroyOnClickRect.sizeDelta = new Vector2(200, 80);
+                destroyOnClickRect.anchoredPosition = new Vector2(0, 140);
+                destroyOnClickGo.AddComponent<Image>().color = Color.white;
+                destroyOnClickGo.AddComponent<DestroyOnClickProbe>();
+                var destroyOnClickPath = HierarchyPath.Build(destroyOnClickGo.transform);
+
+                Canvas.ForceUpdateCanvases();
+                await NextEditorUpdates(3);
+
+                var destroyingClickResponse = await InputTool.HandleCommand(new JObject
+                {
+                    ["action"] = "click",
+                    ["path"] = destroyOnClickPath,
+                    ["settle_frames"] = 0,
+                    ["strict"] = true
+                }) as SuccessResponse;
+                var destroyingClickData = destroyingClickResponse == null
+                    ? null
+                    : JObject.FromObject(destroyingClickResponse.data);
+                allPassed &= ExpectTrue("destroying click returns success", destroyingClickResponse != null);
+                allPassed &= ExpectEqual("destroying click preserves target path", destroyOnClickPath, destroyingClickData?["target_path"]?.ToString());
+                allPassed &= ExpectEqual("destroying click reports destroyed target", true, destroyingClickData?["target_destroyed"]?.Value<bool>());
+
+                var destroyOnDragEndGo = new GameObject("DestroyOnDragEnd", typeof(RectTransform));
+                destroyOnDragEndGo.transform.SetParent(canvasGo.transform, false);
+                var destroyOnDragEndRect = (RectTransform)destroyOnDragEndGo.transform;
+                destroyOnDragEndRect.sizeDelta = new Vector2(200, 80);
+                destroyOnDragEndRect.anchoredPosition = new Vector2(0, -140);
+                destroyOnDragEndGo.AddComponent<Image>().color = Color.white;
+                destroyOnDragEndGo.AddComponent<DestroyOnDragEndProbe>();
+                var destroyOnDragEndPath = HierarchyPath.Build(destroyOnDragEndGo.transform);
+
+                Canvas.ForceUpdateCanvases();
+                await NextEditorUpdates(3);
+
+                var destroyingDragResponse = await InputTool.HandleCommand(new JObject
+                {
+                    ["action"] = "drag",
+                    ["path"] = destroyOnDragEndPath,
+                    ["to_normalized"] = "0.75,0.5",
+                    ["steps"] = 2,
+                    ["settle_frames"] = 0,
+                    ["strict"] = true
+                }) as SuccessResponse;
+                var destroyingDragData = destroyingDragResponse == null
+                    ? null
+                    : JObject.FromObject(destroyingDragResponse.data);
+                allPassed &= ExpectTrue("destroying drag returns success", destroyingDragResponse != null);
+                allPassed &= ExpectEqual("destroying drag preserves target path", destroyOnDragEndPath, destroyingDragData?["target_path"]?.ToString());
+                allPassed &= ExpectEqual("destroying drag reports destroyed target", true, destroyingDragData?["target_destroyed"]?.Value<bool>());
+
+                var blockerGo = new GameObject("Blocker", typeof(RectTransform));
+                blockerGo.transform.SetParent(canvasGo.transform, false);
+                var blockerRect = (RectTransform)blockerGo.transform;
+                blockerRect.sizeDelta = new Vector2(240, 120);
+                blockerRect.anchoredPosition = Vector2.zero;
+                blockerGo.AddComponent<Image>().color = Color.black;
+                blockerGo.transform.SetAsLastSibling();
+
+                Canvas.ForceUpdateCanvases();
+                await NextEditorUpdates(3);
+
+                var blockedResponse = await InputTool.HandleCommand(new JObject
+                {
+                    ["action"] = "click",
+                    ["path"] = HierarchyPath.Build(buttonGo.transform),
+                    ["settle_frames"] = 0,
+                    ["strict"] = true
+                }) as ErrorResponse;
+                allPassed &= ExpectTrue("blocked click returns error", blockedResponse != null);
+                allPassed &= ExpectEqual("blocked click code", "INPUT_TARGET_BLOCKED", blockedResponse?.code);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+                allPassed = false;
+            }
+            finally
+            {
+                Object.Destroy(root);
+            }
+
+            if (allPassed)
+                Debug.Log("[InputQaTests] ALL PASSED");
+            else
+                Debug.LogError("[InputQaTests] SOME TESTS FAILED");
+        }
+
+        private static bool ExpectTrue(string label, bool actual)
+        {
+            if (actual)
+            {
+                Debug.Log("[PASS] " + label);
+                return true;
+            }
+
+            Debug.LogError("[FAIL] " + label + ": expected true");
+            return false;
+        }
+
+        private static bool ExpectEqual<T>(string label, T expected, T actual)
+        {
+            if (Equals(expected, actual))
+            {
+                Debug.Log("[PASS] " + label);
+                return true;
+            }
+
+            Debug.LogError($"[FAIL] {label}: expected '{expected}', got '{actual}'");
+            return false;
+        }
+
+        private static bool ExpectError(string label, JObject request, string expectedCode)
+        {
+            var response = InputTool.HandleCommand(request).GetAwaiter().GetResult() as ErrorResponse;
+            return ExpectEqual(label, expectedCode, response?.code);
+        }
+
+        internal static bool RunContractTests()
+        {
+            var allPassed = InputQaSequenceTests.RunContractTests();
+            allPassed &= InputQaRecordingTests.RunContractTests();
+            var inputSystemState = InputTool.HandleCommand(new JObject
+            {
+                ["action"] = "state",
+                ["backend"] = "inputsystem",
+            }).GetAwaiter().GetResult() as SuccessResponse;
+            allPassed &= ExpectTrue(
+                "Input System capability state is always queryable",
+                inputSystemState != null);
+            allPassed &= ExpectError(
+                "EventSystem backend rejects keyboard synthesis",
+                new JObject
+                {
+                    ["action"] = "keyboard",
+                    ["backend"] = "eventsystem",
+                    ["key"] = "space",
+                },
+                "INPUT_BACKEND_ACTION_MISMATCH");
+            allPassed &= ExpectError(
+                "hold_ms above the cap is rejected before dispatch",
+                new JObject { ["action"] = "state", ["hold_ms"] = 5001 },
+                "INPUT_INVALID_PARAM");
+            allPassed &= ExpectError(
+                "settle_frames above the cap is rejected before dispatch",
+                new JObject { ["action"] = "state", ["settle_frames"] = 121 },
+                "INPUT_INVALID_PARAM");
+            allPassed &= ExpectError(
+                "drag steps above the cap is rejected before dispatch",
+                new JObject { ["action"] = "state", ["steps"] = 121 },
+                "INPUT_INVALID_PARAM");
+            allPassed &= ExpectError(
+                "click_count above the cap is rejected before dispatch",
+                new JObject { ["action"] = "state", ["click_count"] = 4 },
+                "INPUT_INVALID_PARAM");
+            allPassed &= ExpectError(
+                "max_results above the cap is rejected before dispatch",
+                new JObject { ["action"] = "state", ["max_results"] = 101 },
+                "INPUT_INVALID_PARAM");
+            return allPassed;
+        }
+
+        private static async Task NextEditorUpdates(int count)
+        {
+            while (count-- > 0)
+                await NextEditorUpdate();
+        }
+
+        private static Task NextEditorUpdate()
+        {
+            var source = new TaskCompletionSource<bool>();
+            void Tick()
+            {
+                EditorApplication.update -= Tick;
+                source.TrySetResult(true);
+            }
+            EditorApplication.update += Tick;
+            return source.Task;
+        }
+    }
+
+    public sealed class InputQaProbe : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler,
+        ISubmitHandler, IScrollHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
+    {
+        public int PointerDownCount { get; private set; }
+        public int PointerUpCount { get; private set; }
+        public int PointerClickCount { get; private set; }
+        public int SubmitCount { get; private set; }
+        public int ScrollCount { get; private set; }
+        public int BeginDragCount { get; private set; }
+        public int DragCount { get; private set; }
+        public int EndDragCount { get; private set; }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            PointerDownCount++;
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            PointerUpCount++;
+        }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            PointerClickCount++;
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            SubmitCount++;
+        }
+
+        public void OnScroll(PointerEventData eventData)
+        {
+            ScrollCount++;
+        }
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            BeginDragCount++;
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            DragCount++;
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            EndDragCount++;
+        }
+    }
+
+    public sealed class DestroyOnClickProbe : MonoBehaviour, IPointerClickHandler
+    {
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            Object.DestroyImmediate(gameObject);
+        }
+    }
+
+    public sealed class DestroyOnDragEndProbe : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+    {
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            Object.DestroyImmediate(gameObject);
+        }
+    }
+}

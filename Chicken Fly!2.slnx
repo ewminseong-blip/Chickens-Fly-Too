@@ -1,0 +1,7 @@
+﻿<Solution>
+  <Project Path="HeraAgent.Editor.csproj" />
+  <Project Path="HeraAgent.TestRunner.csproj" />
+  <Project Path="HeraAgent.Editor.Tests.csproj" />
+  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="Assembly-CSharp-Editor.csproj" />
+</Solution>

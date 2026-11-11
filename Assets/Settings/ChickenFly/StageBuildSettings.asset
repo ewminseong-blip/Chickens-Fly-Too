@@ -1,0 +1,150 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05bc7c09b4eb3654798b8b505b1f8f48, type: 3}
+  m_Name: StageBuildSettings
+  m_EditorClassIdentifier: Assembly-CSharp-Editor::StageBuildSettings
+  corridorWidth: 24
+  corridorHeight: 26
+  holeSize: {x: 13, y: 8}
+  movePeriod: {x: 4, y: 2.4}
+  windmillSpeed: {x: 45, y: 110}
+  pendulumPeriod: {x: 3.2, y: 2}
+  windLift: {x: 12, y: 20}
+  crossWind: {x: 10, y: 16}
+  spearInterval: {x: 0.2, y: 0.1}
+  cloudMoveTime: {x: 3, y: 2}
+  lightningOff: {x: 1.4, y: 0.9}
+  lightningOn: {x: 0.7, y: 1.1}
+  syncedLightningSpeed: 10
+  boostRingSpeed: 15
+  bounceLaunchSpeed: 20
+  cloudScale: 5.5
+  pendulumAmplitude: 55
+  playerJumpForce: 13
+  stages:
+  - number: 1
+    title: First Flap
+    hint: SPACE = FLAP   W = GO   S = STOP
+    difficulty: 1
+    segments:
+    - {x: 30, y: 0}
+    - {x: 60, y: 12}
+    - {x: 40, y: 0}
+    - {x: 50, y: 18}
+    - {x: 35, y: 0}
+  - number: 2
+    title: Growing Forest
+    hint: Trees grow when you pass by
+    difficulty: 2
+    segments:
+    - {x: 20, y: 0}
+    - {x: 80, y: 15}
+    - {x: 30, y: 0}
+    - {x: 80, y: 20}
+    - {x: 30, y: 0}
+  - number: 3
+    title: Windy Cliffs
+    hint: Ride the wind
+    difficulty: 3
+    segments:
+    - {x: 20, y: 0}
+    - {x: 60, y: 28}
+    - {x: 25, y: 0}
+    - {x: 60, y: 30}
+    - {x: 25, y: 0}
+    - {x: 40, y: 15}
+    - {x: 25, y: 0}
+  - number: 4
+    title: Moving Rocks
+    hint: Watch the rhythm
+    difficulty: 4
+    segments:
+    - {x: 20, y: 0}
+    - {x: 70, y: 20}
+    - {x: 40, y: 0}
+    - {x: 70, y: 22}
+    - {x: 40, y: 0}
+    - {x: 30, y: 0}
+  - number: 5
+    title: Windmill Clouds
+    hint: Find the gap
+    difficulty: 5
+    segments:
+    - {x: 20, y: 0}
+    - {x: 60, y: 18}
+    - {x: 40, y: 0}
+    - {x: 60, y: 20}
+    - {x: 40, y: 0}
+    - {x: 50, y: 15}
+    - {x: 30, y: 0}
+  - number: 6
+    title: Spear Rain
+    hint: Something falls from above
+    difficulty: 6
+    segments:
+    - {x: 20, y: 0}
+    - {x: 60, y: 22}
+    - {x: 30, y: 0}
+    - {x: 60, y: 24}
+    - {x: 30, y: 0}
+    - {x: 60, y: 20}
+    - {x: 25, y: 0}
+  - number: 7
+    title: Above the Clouds
+    hint: Follow the golden rings
+    difficulty: 4.5
+    segments:
+    - {x: 20, y: 0}
+    - {x: 80, y: 12}
+    - {x: 40, y: 0}
+    - {x: 80, y: 12}
+    - {x: 40, y: 0}
+    - {x: 40, y: 0}
+  - number: 8
+    title: Thunder Storm
+    hint: Don't stop. Never stop.
+    difficulty: 5
+    segments:
+    - {x: 20, y: 0}
+    - {x: 120, y: 8}
+    - {x: 40, y: 0}
+    - {x: 100, y: 8}
+    - {x: 30, y: 0}
+  - number: 9
+    title: Upside-Down Space
+    hint: The world turns over
+    difficulty: 7
+    segments:
+    - {x: 20, y: 0}
+    - {x: 40, y: 0}
+    - {x: 60, y: 20}
+    - {x: 40, y: 0}
+    - {x: 60, y: 25}
+    - {x: 40, y: 0}
+    - {x: 50, y: 20}
+    - {x: 30, y: 0}
+  - number: 10
+    title: To the Stars
+    hint: Everything you learned
+    difficulty: 8
+    segments:
+    - {x: 20, y: 0}
+    - {x: 30, y: 0}
+    - {x: 60, y: 22}
+    - {x: 40, y: 0}
+    - {x: 60, y: 25}
+    - {x: 40, y: 0}
+    - {x: 60, y: 28}
+    - {x: 40, y: 0}
+    - {x: 50, y: 15}
+    - {x: 30, y: 0}
+    - {x: 40, y: 0}

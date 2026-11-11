@@ -21,8 +21,8 @@ public class StageBuildSettings : ScriptableObject
     public float cloudRoofOffset = 0.3f;
 
     [Header("세이브 포인트(체크포인트)")]
-    [Tooltip("몇 스테이지마다 세이브 포인트를 둘지. 3이면 4 · 7 · 10스테이지 시작에 하나씩")]
-    [Min(1)] public int checkpointEveryStages = 3;
+    [Tooltip("몇 스테이지마다 세이브 포인트를 둘지. 1이면 2 ~ 10스테이지 시작마다, 3이면 4 · 7 · 10스테이지 시작에 하나씩")]
+    [Min(1)] public int checkpointEveryStages = 1;
     [Tooltip("스테이지 중간 체크포인트도 둘지(기본 끔)")]
     public bool midStageCheckpoints = false;
     [Tooltip("구간이 바뀔 때 폭 · 높이가 서서히 바뀌는 거리(m)")]

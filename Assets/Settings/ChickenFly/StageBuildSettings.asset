@@ -17,7 +17,7 @@ MonoBehaviour:
   ceilingWarnDistance: 6
   cloudRoofBelowHeight: 25
   cloudRoofOffset: 0.3
-  checkpointEveryStages: 3
+  checkpointEveryStages: 1
   midStageCheckpoints: 0
   sizeBlend: 25
   holeSize: {x: 13, y: 8}
@@ -37,6 +37,9 @@ MonoBehaviour:
   syncedLightningSpeed: 15
   boostRingSpeed: 19
   bounceLaunchSpeed: 20
+  hitShrink: 0.92
+  rockfallSpeed: 30
+  rockfallAcceleration: 45
   cloudScale: 3.6
   cloudWallScale: {x: 4.5, y: 6.5}
   atmosphereBlend: 60

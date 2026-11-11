@@ -200,7 +200,8 @@ public static partial class StageBuilder
                 RockGate(ctx, 95f, 14f, 14f + ctx.Hole, -10f, 10f);
                 Comet(ctx, 118f, 18f, 1f);
                 AsteroidBelt(ctx, 140f, 6);
-                Wind(ctx, 160f, 180f, new Vector3(0f, -ctx.Lift, 0f), false);
+                // 뒤집힌 화면에서 빠져나가는 작은 구멍: 바람이 너무 세다는 피드백 → 30% 약하게(구멍은 빛나는 테두리로 표시)
+                Wind(ctx, 160f, 180f, new Vector3(0f, -ctx.Lift * 0.7f, 0f), false);
                 RockGate(ctx, 176f, 2f, 2f + ctx.Hole, -2f, 2f + ctx.Hole * 0.5f);
                 Checkpoint(ctx, 205f);
                 HeadOnFlock(ctx, BirdKind.SpaceChicken, 232f, 14f, 5);
@@ -459,6 +460,51 @@ public static partial class StageBuilder
         if (y1 < top - 0.01f) NaturalBlock(ctx, g, x, (y1 + top) / 2f, 0f, new Vector3(th, top - y1, half * 2f));
         if (z0 > -half + 0.01f) NaturalBlock(ctx, g, x, (y0 + y1) / 2f, (-half + z0) / 2f, new Vector3(th, hy, z0 + half));
         if (z1 < half - 0.01f) NaturalBlock(ctx, g, x, (y0 + y1) / 2f, (z1 + half) / 2f, new Vector3(th, hy, half - z1));
+
+        // 어두운 우주에서는 소행성 벽 사이 구멍이 잘 안 보임 → 빠져나갈 구멍에 빛나는 테두리 + 빛
+        if (ctx.look.wall == WallStyle.Crystal)
+        {
+            HoleMarker(ctx, g, x, y0, y1, z0, z1);
+        }
+    }
+
+    // 구멍 표시: 구멍 가장자리를 따라 빛나는 초록 테두리(충돌 없음)를 벽 앞면에 두고, 가운데에 초록 빛. 살짝 숨 쉬듯 밝아졌다 어두워짐.
+    static void HoleMarker(Ctx ctx, Transform parent, float x, float y0, float y1, float z0, float z1)
+    {
+        Transform g = new GameObject("HoleMarker").transform;
+        g.SetParent(parent, false);
+        float fx = x - S.holeMarkerForward;   // 바위 앞면보다 조금 앞(바위에 가려지지 않게)
+        Quaternion rot = ctx.c.Rot(fx);
+        Material neon = NeonMat("Hole_Marker", C(0.48f, 0.99f, 0.2f), S.holeMarkerGlow);
+        float t = 0.45f;
+        float hy = y1 - y0, hz = z1 - z0;
+        float my = (y0 + y1) / 2f, mz = (z0 + z1) / 2f;
+        g.position = ctx.c.P(fx, my, mz);   // 숨 쉬는 크기 변화가 구멍 가운데를 중심으로 일어나게
+        (string n, float h, float z, Vector3 s)[] bars =
+        {
+            ("Bottom", y0, mz, new Vector3(t, t, hz + t)),
+            ("Top", y1, mz, new Vector3(t, t, hz + t)),
+            ("Left", my, z0, new Vector3(t, hy + t, t)),
+            ("Right", my, z1, new Vector3(t, hy + t, t)),
+        };
+        foreach (var b in bars)
+        {
+            GameObject bar = Prim(PrimitiveType.Cube, g, $"Bar_{b.n}", neon, false);
+            bar.transform.position = ctx.c.P(fx, b.h, b.z);
+            bar.transform.rotation = rot;
+            bar.transform.localScale = b.s;
+        }
+
+        GameObject lightGo = new GameObject("HoleLight");
+        lightGo.transform.SetParent(g, false);
+        lightGo.transform.position = ctx.c.P(fx, my, mz);
+        Light l = lightGo.AddComponent<Light>();
+        l.type = LightType.Point;
+        l.color = C(0.48f, 0.99f, 0.2f);
+        l.range = Mathf.Max(hy, hz) * 1.6f + 4f;
+        l.intensity = S.holeMarkerLight;
+        GlowPulse pulse = g.gameObject.AddComponent<GlowPulse>();
+        SetField(pulse, "pulseLight", l);
     }
 
     static void RockSpire(Ctx ctx, float x, float z, float size)

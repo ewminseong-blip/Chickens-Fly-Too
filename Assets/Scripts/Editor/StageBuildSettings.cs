@@ -67,6 +67,12 @@ public class StageBuildSettings : ScriptableObject
     public float bounceLaunchSpeed = 20f;
     [Tooltip("바위 · 구름 · 소행성 장애물의 판정 크기(보이는 모양 대비 배율). 1이면 보이는 그대로, 작을수록 스쳐도 안 죽음")]
     [Range(0.7f, 1f)] public float hitShrink = 0.92f;
+    [Tooltip("우주 구간 구멍 테두리 밝기(발광 배율)")]
+    public float holeMarkerGlow = 4f;
+    [Tooltip("우주 구간 구멍 가운데 초록 빛 세기")]
+    public float holeMarkerLight = 6f;
+    [Tooltip("구멍 테두리를 벽 앞으로 얼마나 내밀지(m). 바위에 가려지면 키움")]
+    public float holeMarkerForward = 2.6f;
     [Tooltip("낙석이 떨어지기 시작하는 속도(m/s)")]
     public float rockfallSpeed = 30f;
     [Tooltip("낙석이 떨어지며 붙는 가속(m/s²). 높을수록 바닥 가까이에서 훨씬 빨라짐")]

@@ -47,7 +47,7 @@ MonoBehaviour:
   stages:
   - number: 1
     title: First Flap
-    hint: SPACE = FLAP   W = GO (hold to speed up)   SHIFT (hold) = DASH   S = STOP   MOUSE = TURN
+    hint: SPACE = FLAP   MOUSE = LEFT / RIGHT   W = GO (hold to speed up)   SHIFT (hold) = DASH   S = STOP
     difficulty: 1
     width: 30
     height: 45
@@ -76,13 +76,13 @@ MonoBehaviour:
     width: 34
     height: 55
     path:
-    - {x: 26, y: 0, z: 0}
-    - {x: 78, y: 28, z: 0}
-    - {x: 33, y: 0, z: -20}
-    - {x: 78, y: 30, z: 0}
-    - {x: 33, y: 0, z: 25}
-    - {x: 52, y: 15, z: 0}
-    - {x: 33, y: 0, z: -5}
+    - {x: 34, y: 0, z: 0}
+    - {x: 101, y: 28, z: 0}
+    - {x: 43, y: 0, z: -20}
+    - {x: 101, y: 30, z: 0}
+    - {x: 43, y: 0, z: 25}
+    - {x: 68, y: 15, z: 0}
+    - {x: 43, y: 0, z: -5}
   - number: 4
     title: Rockfall Ridge
     hint: Boulders roll, eagles cross
@@ -182,4 +182,4 @@ MonoBehaviour:
     - {x: 50, y: 15, z: 0}
     - {x: 30, y: 0, z: -10}
     - {x: 40, y: 0, z: 0}
-  stagesVersion: 8
+  stagesVersion: 9

@@ -22,17 +22,19 @@ public static partial class StageBuilder
 
         list.Add(new StageDef
         {
-            number = 1, title = "First Flap", hint = "SPACE = FLAP   W = GO (hold to speed up)   SHIFT (hold) = DASH   S = STOP   MOUSE = TURN", difficulty = 1f, zone = "Meadow",
+            number = 1, title = "First Flap", hint = "SPACE = FLAP   MOUSE = LEFT / RIGHT   W = GO (hold to speed up)   SHIFT (hold) = DASH   S = STOP", difficulty = 1f, zone = "Meadow",
             width = 30f, height = 45f,
             content = ctx =>
             {
                 // 속도 1.5배에 맞춰 구간 길이 ×1.3, 장애물 간격도 넓힘(215m → 280m)
-                Sign(ctx, 12f, 12f, 0f, "SPACE : FLAP", 3f);
-                Sign(ctx, 28f, 8f, 0f, "HOLD W : FASTER", 2.4f);
+                // 시작하자마자 보이는 기본 조작 두 가지(날갯짓 · 좌우)를 한자리에 위아래로
+                Sign(ctx, 12f, 12.5f, 0f, "SPACE : FLAP", 3f);
+                Sign(ctx, 12f, 8.5f, 0f, "MOUSE : LEFT / RIGHT", 2.6f);
+                // 출발점에서 위 두 줄과 겹쳐 보이지 않게 더 뒤 · 더 낮게
+                Sign(ctx, 36f, 3.5f, 0f, "HOLD W : FASTER", 2.4f);
                 RockGate(ctx, 58f, 2f, 2f + ctx.Hole, -12f, 12f);
                 Sign(ctx, 92f, 11f, 0f, "HOLD SHIFT : DASH", 2.6f);
                 RockGate(ctx, 145f, 13f, 13f + ctx.Hole, -12f, 12f);
-                Sign(ctx, 162f, 15f, 0f, "MOUSE : TURN", 3f);
                 RockGate(ctx, 195f, 3f, 25f, -14f, -14f + ctx.Hole);
                 RockGate(ctx, 240f, 3f, 25f, 14f - ctx.Hole, 14f);
             }
@@ -65,28 +67,29 @@ public static partial class StageBuilder
             {
                 // 높이가 55m로 늘어난 만큼 '위로 넘어가면 끝'이 되지 않게 높은 곳에도 장애물을 둠.
                 // 상승풍을 타고 오르다 → 높이가 다른 틈을 차례로 통과(아래 → 위 → 가운데)
-                // (플레이 피드백: 상승풍이 너무 세서 조절이 안 됨 → 상승풍만 30% 약하게, 장애물 간격 ×1.3 · 구간 길이 255 → 333m)
-                const float updraft = 0.7f;
-                Wind(ctx, 29f, 101f, new Vector3(0f, ctx.Lift * updraft, 0f), false);
-                RockGate(ctx, 52f, 6f, 6f + ctx.Hole + 2f, -15f, 15f);
-                RockGate(ctx, 81f, 24f, 24f + ctx.Hole + 2f, -15f, 15f);
-                Flock(ctx, BirdKind.Eagle, 107f, 14f, true, 3);
-                Flock(ctx, BirdKind.Eagle, 117f, 34f, false, 3);
-                RockGate(ctx, 130f, 14f, 14f + ctx.Hole + 2f, -10f, 10f);
-                Wind(ctx, 140f, 215f, new Vector3(0f, ctx.Lift * 0.9f * updraft, 0f), false);
+                // (플레이 피드백 1: 상승풍이 너무 세서 조절이 안 됨 → 상승풍 30% 약하게, 간격 ×1.3 · 255 → 333m)
+                // (플레이 피드백 2: 여전히 과하게 어려움 → 상승풍 20% 더 약하게(0.7 × 0.8 = 0.56), 간격 ×1.3 더 · 333 → 433m)
+                const float updraft = 0.56f;
+                Wind(ctx, 38f, 131f, new Vector3(0f, ctx.Lift * updraft, 0f), false);
+                RockGate(ctx, 68f, 6f, 6f + ctx.Hole + 2f, -15f, 15f);
+                RockGate(ctx, 105f, 24f, 24f + ctx.Hole + 2f, -15f, 15f);
+                Flock(ctx, BirdKind.Eagle, 139f, 14f, true, 3);
+                Flock(ctx, BirdKind.Eagle, 152f, 34f, false, 3);
+                RockGate(ctx, 169f, 14f, 14f + ctx.Hole + 2f, -10f, 10f);
+                Wind(ctx, 182f, 280f, new Vector3(0f, ctx.Lift * 0.9f * updraft, 0f), false);
                 // 바위 기둥 숲 + 기둥 사이 높은 곳의 걸린 바위 턱(위로만 피하면 막힘)
-                RockSpire(ctx, 163f, -7f, 4f); RockSpire(ctx, 182f, 7f, 4f); RockSpire(ctx, 202f, -2f, 4f);
-                NaturalBlock(ctx, Group(ctx, "Ledge_172"), 172f, 30f, 3f, new Vector3(3f, 5f, 22f));
-                NaturalBlock(ctx, Group(ctx, "Ledge_192"), 192f, 20f, -4f, new Vector3(3f, 5f, 22f));
-                NaturalBlock(ctx, Group(ctx, "Ledge_211"), 211f, 38f, 0f, new Vector3(3f, 6f, 34f));
-                Wind(ctx, 224f, 267f, new Vector3(0f, 0f, ctx.CrossWind), true);
-                RockSpire(ctx, 241f, 9f, 4f); RockSpire(ctx, 257f, 2f, 4f);
-                RockSpire(ctx, 248f, -10f, 4f);
-                HeadOnFlock(ctx, BirdKind.Eagle, 262f, 28f, 3);
-                Wind(ctx, 276f, 306f, new Vector3(0f, -ctx.Lift, 0f), false);
-                RockGate(ctx, 296f, 2f, 2f + ctx.Hole, -14f, 14f);
+                RockSpire(ctx, 212f, -7f, 4f); RockSpire(ctx, 237f, 7f, 4f); RockSpire(ctx, 263f, -2f, 4f);
+                NaturalBlock(ctx, Group(ctx, "Ledge_224"), 224f, 30f, 3f, new Vector3(3f, 5f, 22f));
+                NaturalBlock(ctx, Group(ctx, "Ledge_250"), 250f, 20f, -4f, new Vector3(3f, 5f, 22f));
+                NaturalBlock(ctx, Group(ctx, "Ledge_274"), 274f, 38f, 0f, new Vector3(3f, 6f, 34f));
+                Wind(ctx, 291f, 347f, new Vector3(0f, 0f, ctx.CrossWind), true);
+                RockSpire(ctx, 313f, 9f, 4f); RockSpire(ctx, 334f, 2f, 4f);
+                RockSpire(ctx, 322f, -10f, 4f);
+                HeadOnFlock(ctx, BirdKind.Eagle, 341f, 28f, 3);
+                Wind(ctx, 359f, 398f, new Vector3(0f, -ctx.Lift, 0f), false);
+                RockGate(ctx, 385f, 2f, 2f + ctx.Hole, -14f, 14f);
             }
-        }.Seg(26, 0).Seg(78, 28).Seg(33, 0, -20).Seg(78, 30).Seg(33, 0, 25).Seg(52, 15).Seg(33, 0, -5));
+        }.Seg(34, 0).Seg(101, 28).Seg(43, 0, -20).Seg(101, 30).Seg(43, 0, 25).Seg(68, 15).Seg(43, 0, -5));
 
         list.Add(new StageDef
         {

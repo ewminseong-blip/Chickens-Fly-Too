@@ -65,6 +65,8 @@ public class StageBuildSettings : ScriptableObject
     public float boostRingSpeed = 19f;
     [Tooltip("상승 기류(열기둥)가 올려 주는 속도(m/s)")]
     public float bounceLaunchSpeed = 20f;
+    [Tooltip("바위 · 구름 · 소행성 장애물의 판정 크기(보이는 모양 대비 배율). 1이면 보이는 그대로, 작을수록 스쳐도 안 죽음")]
+    [Range(0.7f, 1f)] public float hitShrink = 0.92f;
     [Tooltip("낙석이 떨어지기 시작하는 속도(m/s)")]
     public float rockfallSpeed = 30f;
     [Tooltip("낙석이 떨어지며 붙는 가속(m/s²). 높을수록 바닥 가까이에서 훨씬 빨라짐")]

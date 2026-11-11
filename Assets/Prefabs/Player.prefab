@@ -674,7 +674,10 @@ MonoBehaviour:
   windDriftDecay: 10
   minYAngle: -45
   maxYAngle: 45
-  rotationSpeed: 180
+  rotationSpeed: 900
+  mouseDeadZone: 12
+  cameraFollowsPath: 1
+  cameraYawSmoothTime: 0.35
   cameraTransform: {fileID: 0}
   cameraOffset: {x: -10, y: 4.5, z: 0}
   cameraSmoothTime: 0.12

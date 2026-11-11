@@ -57,10 +57,19 @@ public class Mover : MonoBehaviour
     // 바람 밖에서 밀린 속도가 사라지는 정도(m/s²)
     [SerializeField] float windDriftDecay = 10f;
 
-    [Header("마우스 방향")]
+    [Header("마우스 방향 (화면에서 닭 → 포인터 각도 = 닭 회전각)")]
+    [Tooltip("길 방향에서 왼쪽으로 돌 수 있는 최대 각도(°)")]
     [SerializeField] float minYAngle = -45f;
+    [Tooltip("길 방향에서 오른쪽으로 돌 수 있는 최대 각도(°)")]
     [SerializeField] float maxYAngle = 45f;
-    [SerializeField] float rotationSpeed = 180f;
+    [Tooltip("닭이 마우스 각도를 따라 도는 속도(°/초). 클수록 즉시 따라감")]
+    [SerializeField] float rotationSpeed = 900f;
+    [Tooltip("포인터가 닭에서 이 픽셀 안이면 방향을 바꾸지 않음")]
+    [SerializeField] float mouseDeadZone = 12f;
+    [Tooltip("켜면 카메라가 닭이 아니라 길 방향을 따라감(닭이 마우스 쪽으로 도는 게 화면에 그대로 보임). 끄면 예전처럼 닭 뒤를 따라 돎")]
+    [SerializeField] bool cameraFollowsPath = true;
+    [Tooltip("길이 꺾일 때 카메라가 따라 도는 부드러움(초)")]
+    [SerializeField] float cameraYawSmoothTime = 0.35f;
 
     [Header("카메라 (Mover 혼자 위치 · 방향을 정함)")]
     [SerializeField] Transform cameraTransform;
@@ -164,7 +173,7 @@ public class Mover : MonoBehaviour
         if (path != null)
         {
             float s = path.Progress(transform.position, ref pathHint);
-            currentYAngle = targetYAngle = path.Yaw(s);
+            currentYAngle = targetYAngle = pathYaw = cameraYaw = path.Yaw(s);
             transform.rotation = Quaternion.Euler(initialXAngle, currentYAngle, initialZAngle);
             playerRigidbody.rotation = transform.rotation;
         }
@@ -183,7 +192,7 @@ public class Mover : MonoBehaviour
 
     Vector3 CameraTargetPosition()
     {
-        Vector3 facing = FacingDirection();
+        Vector3 facing = CameraHeading();
         Vector3 side = Vector3.Cross(Vector3.up, facing);
         float back = cameraOffset.x - speedPullBack * speedFeel;   // 빨라질수록 살짝 뒤로
         return transform.position + facing * back + Vector3.up * cameraOffset.y + side * cameraOffset.z;
@@ -237,7 +246,7 @@ public class Mover : MonoBehaviour
 
     Quaternion CameraTargetRotation()
     {
-        return Quaternion.LookRotation(FacingDirection(), Vector3.up) *
+        return Quaternion.LookRotation(CameraHeading(), Vector3.up) *
                Quaternion.Euler(cameraPitch, 0f, 0f) *
                Quaternion.AngleAxis(CameraRoll, Vector3.forward);
     }
@@ -250,6 +259,7 @@ public class Mover : MonoBehaviour
         }
 
         speedFeel = Mathf.Lerp(speedFeel, SpeedRatio, 1f - Mathf.Exp(-Time.deltaTime * 4f));
+        cameraYaw = Mathf.SmoothDampAngle(cameraYaw, pathYaw, ref cameraYawVelocity, cameraYawSmoothTime);
 
         cameraTransform.position = Vector3.SmoothDamp(cameraTransform.position, CameraTargetPosition(), ref cameraVelocity, cameraSmoothTime);
         cameraTransform.rotation = CameraTargetRotation();
@@ -387,20 +397,84 @@ public class Mover : MonoBehaviour
         playerRigidbody.linearVelocity = v;
     }
 
+    // 마우스 각도 = 닭 회전각: 화면에서 '닭 → 마우스 포인터' 선이 길 앞쪽에서 기운 각도만큼 닭이 돕니다.
+    // 화면에 그려지는 각도로 맞추므로(원근 · 카메라 기울기 · 중력 반전 화면 회전 포함) 닭 머리가 늘 포인터 쪽을 향합니다.
     void SetTargetAngle()
     {
-        float mouseX = Mathf.Clamp01(Input.mousePosition.x / Screen.width);
+        pathYaw = path != null ? path.Yaw(path.Progress(transform.position, ref pathHint)) : currentYAngle;
 
-        // 화면이 180° 돌아 있으면 화면 왼쪽 = 월드 오른쪽. 화면 기준을 지키도록 뒤집어 읽습니다.
-        if (isViewFlipped)
+        if (cameraComponent == null)
         {
-            mouseX = 1f - mouseX;
+            // 카메라가 없으면 예전 방식(화면 가로 위치 → 각도)
+            float mouseX = Mathf.Clamp01(Input.mousePosition.x / Screen.width);
+            if (isViewFlipped) mouseX = 1f - mouseX;
+            targetYAngle = pathYaw + Mathf.Lerp(minYAngle, maxYAngle, mouseX);
+            return;
         }
 
-        // 마우스 좌우는 '지금 위치의 길 방향' 기준 ±45°(길이 꺾여도 따라갈 수 있음)
-        float baseYaw = path != null ? path.Yaw(path.Progress(transform.position, ref pathHint)) : 0f;
-        targetYAngle = baseYaw + Mathf.Lerp(minYAngle, maxYAngle, mouseX);
+        if (TryYawOffsetForScreenPoint(Input.mousePosition, out float offset))
+        {
+            targetYAngle = pathYaw + offset;
+        }
     }
+
+    // 화면의 한 점(포인터)을 '닭이 그쪽을 보려면 길 방향에서 몇 ° 돌아야 하나'로 바꿉니다(최소 ~ 최대 각도로 자름).
+    public bool TryYawOffsetForScreenPoint(Vector2 screenPoint, out float offset)
+    {
+        offset = 0f;
+        if (cameraComponent == null) return false;
+        Vector3 origin = transform.position;
+        Vector3 o3 = cameraComponent.WorldToScreenPoint(origin);
+        if (o3.z <= 0f) return false;
+        Vector2 o = o3;
+        Vector2 m = screenPoint - o;
+        if (m.sqrMagnitude < mouseDeadZone * mouseDeadZone)
+        {
+            return false;   // 포인터가 닭 바로 위면 방향을 정할 수 없으니 그대로
+        }
+
+        Vector2 fwd = ScreenDir(origin, pathYaw, o);
+        float want = -Vector2.SignedAngle(fwd, m);   // +면 화면에서 오른쪽으로 기움
+
+        // 월드 각도 θ를 화면에 그렸을 때의 각도가 want가 되는 θ를 이분 탐색(원근 때문에 1:1이 아님)
+        float lo = -89f, hi = 89f;
+        for (int i = 0; i < 14; i++)
+        {
+            float mid = (lo + hi) * 0.5f;
+            float shown = -Vector2.SignedAngle(fwd, ScreenDir(origin, pathYaw + mid, o));
+            if (shown < want) lo = mid; else hi = mid;
+        }
+        offset = Mathf.Clamp((lo + hi) * 0.5f, minYAngle, maxYAngle);
+        return true;
+    }
+
+    // 확인용: 길 방향에서 offset만큼 돈 방향이 화면에서 닭 기준 몇 °로 그려지는지(오른쪽 +)
+    public float ScreenAngleOfYawOffset(float offset)
+    {
+        if (cameraComponent == null) return float.NaN;
+        Vector2 o = cameraComponent.WorldToScreenPoint(transform.position);
+        Vector2 fwd = ScreenDir(transform.position, pathYaw, o);
+        return -Vector2.SignedAngle(fwd, ScreenDir(transform.position, pathYaw + offset, o));
+    }
+
+    // 닭에서 yaw 방향으로 조금 나간 점이 화면에서 닭으로부터 어느 쪽인지
+    Vector2 ScreenDir(Vector3 origin, float yaw, Vector2 originOnScreen)
+    {
+        Vector3 p = cameraComponent.WorldToScreenPoint(origin + YawDirection(yaw) * 2f);
+        return (Vector2)p - originOnScreen;
+    }
+
+    Vector3 YawDirection(float yaw)
+    {
+        Vector3 tiltedForward = Quaternion.Euler(initialXAngle, 0f, initialZAngle) * Vector3.right;
+        Vector3 flatForward = new Vector3(tiltedForward.x, 0f, tiltedForward.z);
+        if (flatForward.sqrMagnitude < 0.0001f) flatForward = Vector3.right;
+        return Quaternion.Euler(0f, yaw, 0f) * flatForward.normalized;
+    }
+
+    float pathYaw;
+    float cameraYaw;
+    float cameraYawVelocity;
 
     CoursePath path;
     int pathHint = -1;
@@ -415,19 +489,11 @@ public class Mover : MonoBehaviour
         playerRigidbody.MoveRotation(Quaternion.Euler(initialXAngle, currentYAngle, initialZAngle));
     }
 
-    Vector3 FacingDirection()
-    {
-        // 모델 축이 기울어져 있어 앞쪽은 transform.right입니다. 좌우 각도만으로 수평 앞쪽을 구합니다.
-        Vector3 tiltedForward = Quaternion.Euler(initialXAngle, 0f, initialZAngle) * Vector3.right;
-        Vector3 flatForward = new Vector3(tiltedForward.x, 0f, tiltedForward.z);
+    // 모델 축이 기울어져 있어 앞쪽은 transform.right입니다. 좌우 각도만으로 수평 앞쪽을 구합니다.
+    Vector3 FacingDirection() => YawDirection(currentYAngle);
 
-        if (flatForward.sqrMagnitude < 0.0001f)
-        {
-            flatForward = Vector3.right;
-        }
-
-        return Quaternion.Euler(0f, currentYAngle, 0f) * flatForward.normalized;
-    }
+    // 카메라가 바라보는 수평 방향: 닭이 아니라 '길 방향'을 부드럽게 따라감 → 닭이 마우스 쪽으로 도는 게 화면에 그대로 보임
+    Vector3 CameraHeading() => cameraFollowsPath ? YawDirection(cameraYaw) : FacingDirection();
 
     // W 전진 · S 브레이크 겸 후진 · 좌우는 마우스. 위아래 속도는 건드리지 않습니다.
     void MovePlayer()

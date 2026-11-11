@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
@@ -354,7 +354,10 @@ public static partial class StageBuilder
 
     // ───────────────────────── 땅 · 숲 · 절벽 · 산 ─────────────────────────
 
-    // 자연 장애물 덩어리: 보이지 않는 상자 충돌(작게) + 바위 / 구름 / 소행성 모양(크게). size = (앞뒤, 높이, 옆)
+    // 자연 장애물 덩어리: 바위 / 구름 / 소행성을 size(앞뒤, 높이, 옆) 자리에 빽빽이 쌓음.
+    // 판정 = 보이는 모양: 덩어리 하나하나에 그 모양 그대로의 충돌을 붙임(살짝 작게 = 스치기만 하면 안 죽는 아주 작은 관용).
+    // (예전에는 보이지 않는 상자 하나가 판정이라 바위가 상자보다 평균 1.4 ~ 2.6m 튀어나와 '닿았는데 지나가지는' 곳이 있었음.
+    //  한때 바위를 상자 크기로 줄여 맞췄다가 바위가 작아 보여서, 크기는 원래대로 두고 판정을 바위에 맞추는 방식으로 바꿈)
     static void NaturalBlock(Ctx ctx, Transform parent, float x, float h, float z, Vector3 size)
     {
         Quaternion rot = ctx.c.Rot(x);
@@ -363,14 +366,6 @@ public static partial class StageBuilder
         block.transform.SetParent(parent, false);
         block.transform.position = center;
         block.transform.rotation = rot;
-        BoxCollider box = block.AddComponent<BoxCollider>();
-        box.size = size;
-
-        // 보이는 모양 = 판정: 바위가 충돌 상자 밖으로 visualMargin(m) 넘게 튀어나오지 않게 축마다 크기 · 위치를 맞춤.
-        // (예전에는 바위가 상자보다 평균 1.4 ~ 2.6m, 최대 7m 튀어나와 '닿았는데 지나가지는' 곳이 생겼음)
-        const float rockR = 0.68f;        // 바위 메시 반지름(크기 1당, 울퉁불퉁 최대)
-        const float visualMargin = 0.3f;  // 보이는 가장자리가 판정보다 이만큼만 바깥(아주 작은 관용)
-        float thick = 0f;
 
         float s = Mathf.Clamp(Mathf.Min(size.y, size.z), 2.5f, 7f);
         int ny = Mathf.Max(1, Mathf.CeilToInt(size.y / (s * 0.8f)));
@@ -383,108 +378,65 @@ public static partial class StageBuilder
                     Random.Range(-0.3f, 0.3f),
                     (ny == 1 ? 0f : -size.y / 2f + size.y * (j + 0.5f) / ny) + Random.Range(-0.4f, 0.4f),
                     (nz == 1 ? 0f : -size.z / 2f + size.z * (k + 0.5f) / nz) + Random.Range(-0.4f, 0.4f));
-                float sc = s * Random.Range(1.05f, 1.3f);
-
-                if (ctx.look.wall == WallStyle.Cloud)
-                {
-                    GameObject cloud = SpawnCloud(ctx, block.transform, center + rot * local, sc * 0.75f, false);
-                    if (cloud != null) thick = Mathf.Max(thick, 2f * FitInside(cloud, block.transform, size, visualMargin));
-                    continue;
-                }
-
-                // 바위 · 소행성: 축마다 크기를 상자에 맞추고(위아래는 메시가 0.85배 납작), 가장자리 바위는 안쪽으로
-                Vector3 sc3 = new Vector3(Mathf.Max(size.x * 1.6f, sc * 0.8f), sc, sc);
-                sc3.y = Mathf.Min(sc3.y, (size.y + 2f * visualMargin) / (2f * rockR * 0.85f));
-                sc3.z = Mathf.Min(sc3.z, (size.z + 2f * visualMargin) / (2f * rockR));
-                float ey = rockR * 0.85f * sc3.y, ez = rockR * sc3.z;
-                local.y = Mathf.Clamp(local.y, -Mathf.Max(0f, size.y / 2f + visualMargin - ey), Mathf.Max(0f, size.y / 2f + visualMargin - ey));
-                local.z = Mathf.Clamp(local.z, -Mathf.Max(0f, size.z / 2f + visualMargin - ez), Mathf.Max(0f, size.z / 2f + visualMargin - ez));
-                thick = Mathf.Max(thick, 2f * rockR * sc3.x + Mathf.Abs(local.x) * 2f);
                 Vector3 p = center + rot * local;
-                // 앞뒤로만 살짝 돌림(옆으로 크게 돌리면 두꺼운 축이 옆으로 가서 다시 튀어나옴)
-                Quaternion tilt = Quaternion.Euler(Random.Range(-6f, 6f), (Random.value < 0.5f ? 0f : 180f) + Random.Range(-6f, 6f), Random.Range(-6f, 6f));
+                float sc = s * Random.Range(1.05f, 1.3f);
 
                 switch (ctx.look.wall)
                 {
+                    case WallStyle.Cloud:
+                    {
+                        // 구름은 프리팹의 구 충돌을 그대로 살려 보이는 구름 = 판정
+                        GameObject cloud = SpawnCloud(ctx, block.transform, p, sc * 0.75f, true);
+                        if (cloud != null)
+                        {
+                            foreach (SphereCollider sph in cloud.GetComponentsInChildren<SphereCollider>()) sph.radius *= S.hitShrink;
+                        }
+                        break;
+                    }
                     case WallStyle.Crystal:
                     {
-                        GameObject r = MeshObject(block.transform, "Asteroid", RockMesh(Random.Range(0, 6)), ctx.obstacleMat);
+                        Mesh mesh = RockMesh(Random.Range(0, 6));
+                        GameObject r = MeshObject(block.transform, "Asteroid", mesh, ctx.obstacleMat);
                         r.transform.position = p;
-                        r.transform.rotation = rot * tilt;
-                        r.transform.localScale = sc3;
+                        r.transform.rotation = Random.rotation;
+                        r.transform.localScale = new Vector3(Mathf.Max(size.x * 1.6f, sc * 0.8f), sc, sc);
+                        ShapeHit(r, mesh);
                         if (Random.value < 0.25f)
                         {
                             Material[] neon = NeonSet();
-                            GameObject c = MeshObject(block.transform, "Crystal", CrystalMesh(), neon[Random.Range(0, neon.Length)]);
+                            Mesh crystal = CrystalMesh();
+                            GameObject c = MeshObject(block.transform, "Crystal", crystal, neon[Random.Range(0, neon.Length)]);
                             c.transform.position = p + Random.onUnitSphere * sc * 0.4f;
                             c.transform.rotation = Random.rotation;
                             c.transform.localScale = new Vector3(1f, 3f, 1f) * Random.Range(0.6f, 1f);
-                            // 튀어나온 수정도 보이는 대로 판정
-                            MeshCollider cc = c.AddComponent<MeshCollider>();
-                            cc.convex = true;
+                            ShapeHit(c, crystal);
                         }
                         break;
                     }
                     default:
                     {
-                        GameObject r = MeshObject(block.transform, "Rock", RockMesh(Random.Range(0, 6)), ctx.obstacleMat);
+                        Mesh mesh = RockMesh(Random.Range(0, 6));
+                        GameObject r = MeshObject(block.transform, "Rock", mesh, ctx.obstacleMat);
                         r.transform.position = p;
-                        r.transform.rotation = rot * tilt;
-                        r.transform.localScale = sc3;
+                        r.transform.rotation = rot * Quaternion.Euler(Random.Range(-15f, 15f), Random.Range(0f, 360f), Random.Range(-15f, 15f));
+                        r.transform.localScale = new Vector3(Mathf.Max(size.x * 1.6f, sc * 0.8f), sc, sc);
+                        ShapeHit(r, mesh);
                         break;
                     }
                 }
             }
         }
-
-        // 앞뒤 두께도 보이는 바위에 맞춤(조금 얇게 = 앞면을 스칠 때만 약간의 관용)
-        if (thick > 0f)
-        {
-            box.size = new Vector3(Mathf.Max(size.x, thick - 2f * visualMargin), size.y, size.z);
-        }
     }
 
-    // 구름 덩어리를 상자(로컬 크기 size) 안에 들어가게 줄이고 옮김: 보이는 구름 가장자리가 판정 밖으로 margin 넘게 안 나오게
-    // 돌려주는 값: 앞뒤(x)로 가장 멀리 나간 거리(상자 두께를 구름에 맞추는 데 씀)
-    static float FitInside(GameObject cloud, Transform box, Vector3 size, float margin)
+    // 보이는 메시 모양 그대로의 충돌(볼록 메시)을 살짝 작게(S.hitShrink배) 붙임
+    static void ShapeHit(GameObject visual, Mesh mesh)
     {
-        Renderer[] rs = cloud.GetComponentsInChildren<Renderer>();
-        if (rs.Length == 0) return 0f;
-        float reachX = 0f;
-        for (int pass = 0; pass < 2; pass++)
-        {
-            Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
-            foreach (Renderer r in rs)
-            {
-                Bounds b = r.bounds;
-                for (int i = 0; i < 8; i++)
-                {
-                    Vector3 corner = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
-                    Vector3 l = box.InverseTransformPoint(corner);
-                    min = Vector3.Min(min, l);
-                    max = Vector3.Max(max, l);
-                }
-            }
-            Vector3 ext = (max - min) / 2f;
-            Vector3 lim = size / 2f + Vector3.one * margin;
-            reachX = Mathf.Max(Mathf.Abs(min.x), Mathf.Abs(max.x));
-            // 옆 · 위아래가 상자보다 크면 줄임(앞뒤 x는 두께라 그대로)
-            float k = Mathf.Min(1f, lim.y / Mathf.Max(0.01f, ext.y), lim.z / Mathf.Max(0.01f, ext.z));
-            if (pass == 0 && k < 1f)
-            {
-                cloud.transform.localScale *= k;
-                continue;
-            }
-            // 가장자리를 넘으면 안쪽으로 밀기
-            Vector3 shift = Vector3.zero;
-            if (max.y > lim.y) shift.y -= max.y - lim.y;
-            if (min.y < -lim.y) shift.y += -lim.y - min.y;
-            if (max.z > lim.z) shift.z -= max.z - lim.z;
-            if (min.z < -lim.z) shift.z += -lim.z - min.z;
-            cloud.transform.position += box.TransformVector(shift);
-            break;
-        }
-        return reachX;
+        GameObject hit = new GameObject("Hit");
+        hit.transform.SetParent(visual.transform, false);
+        hit.transform.localScale = Vector3.one * S.hitShrink;
+        MeshCollider mc = hit.AddComponent<MeshCollider>();
+        mc.sharedMesh = mesh;
+        mc.convex = true;
     }
 
     // 틈이 있는 자연 벽: (y0~y1: 바닥에서 높이, z0~z1: 옆) 자리만 비어 있음. 범위는 그 위치의 폭 · 높이로 자름.

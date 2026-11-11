@@ -36,16 +36,25 @@ public class TimedHazard : MonoBehaviour
         fullScale = transform.localScale;
     }
 
+    float myProgress;
+
+    void Start()
+    {
+        CoursePath path = CoursePath.Get();
+        myProgress = path != null ? path.Progress(transform.position) : transform.position.x;
+    }
+
     float CurrentPhaseOffset()
     {
-        if (syncSpeed <= 0f || !HazardSync.HasGate || transform.position.x < HazardSync.OriginX)
+        if (syncSpeed <= 0f || !HazardSync.HasGate || myProgress < HazardSync.OriginX)
         {
             return phaseOffset;
         }
 
-        // 게이트를 지난 시각 + (내 위치 - 게이트 위치) / 속도 = 플레이어가 나에게 도착하는 시각.
-        // 그 순간이 '꺼짐 구간 한가운데'가 되도록 박자를 맞춥니다.
-        float arrival = HazardSync.StartTime + (transform.position.x - HazardSync.OriginX) / syncSpeed;
+        // 게이트를 지난 시각 + (내 위치 - 게이트 위치) / 그때 속도 = 플레이어가 나에게 도착하는 시각.
+        // 그 순간이 '꺼짐 구간 한가운데'가 되도록 박자를 맞춥니다. 속도는 게이트에서 실제로 잰 값(가속해도 맞음).
+        float speed = HazardSync.Speed > 2f ? HazardSync.Speed : syncSpeed;
+        float arrival = HazardSync.StartTime + (myProgress - HazardSync.OriginX) / speed;
         return arrival - offTime * 0.5f;
     }
 

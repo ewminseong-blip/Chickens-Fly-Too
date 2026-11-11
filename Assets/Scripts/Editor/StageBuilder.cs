@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.IO;
 using TMPro;
 using Unity.Cinemachine;
-using Unity.Cinemachine.TargetTracking;
 using UnityEditor;
 using UnityEditor.Events;
 using UnityEditor.SceneManagement;
@@ -13,11 +12,12 @@ using UnityEngine.UI;
 
 // Chicken Fly!2 월드 생성기 (핵심).
 // 메뉴: Chicken Fly ▸ Build World (10 Stages)
-//  - 시즌1처럼 '처음부터 끝까지 이어진 하나의 맵'을 만듭니다. 10개 스테이지는 그 안의 구간입니다.
-//  - 앞으로 갈수록 바닥이 계속 올라가고(높이 0 → 약 570m), 땅 → 숲 → 절벽 → 산 → 구름층 → 구름 속 → 구름 위 → 폭풍 → 우주로 바뀝니다.
+//  - 시즌1처럼 '처음부터 끝까지 이어진 하나의 맵'. 10개 스테이지는 그 안의 구간입니다.
+//  - 길은 위로 계속 올라가면서(높이 0 → 약 570m) 구간마다 왼쪽 · 오른쪽으로 꺾입니다(시즌1 구조).
+//  - 구간마다 폭 · 높이가 다릅니다: 넓은 곳은 자유 비행, 구름 구간처럼 좁은 곳은 좁음 자체가 난이도.
 //  - 하늘 · 안개 · 빛 · 후처리는 ZoneAtmosphere가 구간 사이에서 서서히 섞습니다.
 //  - 숫자는 StageBuildSettings 에셋에서 조절하고, 다시 누르면 월드 씬을 덮어씁니다.
-// 파일 나눔: StageBuilder.cs(핵심) · StageBuilder.Environment.cs(지형 · 벽 · 배경 · 분위기) · StageBuilder.Nature.cs(스테이지 내용 · 자연물 기믹)
+// 파일: StageBuilder.cs(핵심 · 길) · StageBuilder.Environment.cs(지형 · 벽 · 배경 · 분위기) · StageBuilder.Nature.cs(스테이지 내용 · 자연물)
 public static partial class StageBuilder
 {
     const string TemplateScene = "Assets/Scenes/Scenes_Level1.unity";
@@ -29,9 +29,10 @@ public static partial class StageBuilder
     const string SettingsPath = "Assets/Settings/ChickenFly/StageBuildSettings.asset";
     const string FeedbackSettingsPath = "Assets/Resources/FX/FeedbackSettings.asset";
 
+    // 스테이지 기본값을 바꾸면 올립니다(설정 에셋의 스테이지 목록을 새 기본값으로 다시 채움).
+    const int StagesVersion = 6;
+
     static StageBuildSettings S;
-    static float W = 24f;   // 복도 폭(Z)
-    static float H = 26f;   // 바닥에서 위 경계까지(바닥에 수직)
 
     static readonly string[] KeepRoots = { "Player", "Main Camera", "CinemachineCamera", "EventSystem", "Directional Light" };
     static readonly string[] RequiredTags = { "Text", "Trigger", "Ending", "Obstacle", "Hit", "Drop", "Roof", "SpearTrigger", "Boundary" };
@@ -87,12 +88,8 @@ public static partial class StageBuilder
         EnsureFolder(FxFolder);
         BuildFxAssets();
         LoadOrCreateFeedbackSettings();
-
         S = LoadOrCreateSettings();
-        W = S.corridorWidth;
-        H = S.corridorHeight;
 
-        // 예전 방식(스테이지마다 씬)으로 만든 씬 · 메시는 지웁니다.
         if (AssetDatabase.IsValidFolder(OldStageFolder)) AssetDatabase.DeleteAsset(OldStageFolder);
         CleanGeneratedMeshes();
 
@@ -103,28 +100,35 @@ public static partial class StageBuilder
         }
         Random.InitState(20261111);
 
-        // 1) 스테이지 정의 → 하나의 이어진 코스
+        // 1) 스테이지 정의 → 하나의 이어진 길(오르막 · 좌우 꺾임 · 구간별 폭과 높이)
         List<StageDef> stages = DefineStages();
         ApplyOverrides(stages);
 
         Course course = new Course { baseY = 0f };
         List<float> starts = new List<float>();
+        float acc = 0f;
         foreach (StageDef d in stages)
         {
-            starts.Add(course.Length);
-            course.segs.AddRange(d.segs);
+            starts.Add(acc);
+            foreach (Vector3 s in d.segs)
+            {
+                course.segs.Add(s);
+                course.sizes.Add(new Vector2(d.width, d.height));
+                acc += s.x;
+            }
         }
+        course.Bake(S.sizeBlend);
 
         Transform world = new GameObject("World").transform;
         Material triggerMat = Mat("Trigger_Invisible", new Color(1f, 1f, 1f, 0f), 0f);
         List<Ctx> contexts = new List<Ctx>();
 
-        // 2) 구간마다: 지형 · 벽 · 배경 → 자연물 기믹 → 구간 시작 체크포인트
+        // 2) 구간마다: 지형 · 벽 · 배경 → 구간 시작 체크포인트 → 자연물 기믹
         for (int i = 0; i < stages.Count; i++)
         {
             StageDef def = stages[i];
             float len = 0f;
-            foreach (Vector2 s in def.segs) len += s.x;
+            foreach (Vector3 s in def.segs) len += s.x;
 
             Ctx ctx = new Ctx
             {
@@ -143,11 +147,11 @@ public static partial class StageBuilder
             contexts.Add(ctx);
 
             BuildSection(ctx);
-            if (!ctx.isFirst) Checkpoint(ctx, 4f, i * 100);   // 구간이 바뀌는 곳 = 체크포인트
+            if (!ctx.isFirst) Checkpoint(ctx, 4f, i * 100);
             def.content?.Invoke(ctx);
         }
 
-        // 3) 맵 전체: 출발 둥지 · 도착 둥지 · 바리케이드 · 경계 · 분위기 전환 · 카메라 · UI
+        // 3) 맵 전체: 길 정보 · 출발 · 도착 · 바리케이드 · 경계 · 분위기 · 카메라 · UI
         BuildWorldWide(world, course, contexts);
         SetupPlayerCameraUi(course, contexts);
 
@@ -155,7 +159,7 @@ public static partial class StageBuilder
         EditorSceneManager.SaveScene(scene, WorldScene);
         EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(WorldScene, true) };
         AssetDatabase.SaveAssets();
-        Debug.Log($"[StageBuilder] 월드 생성 완료: 스테이지 {stages.Count}개, 길이 {course.Length:0}m, 마지막 높이 {course.EndY:0}m");
+        Debug.Log($"[StageBuilder] 월드 생성 완료: 스테이지 {stages.Count}개, 길이 {course.Length:0}m, 마지막 높이 {course.FloorY(course.Length):0}m");
     }
 
     static void CleanGeneratedMeshes()
@@ -164,10 +168,8 @@ public static partial class StageBuilder
         foreach (string guid in AssetDatabase.FindAssets("t:Mesh", new[] { MeshFolder }))
         {
             string path = AssetDatabase.GUIDToAssetPath(guid);
-            if (Path.GetFileName(path).StartsWith("Stage") || Path.GetFileName(path).StartsWith("World_"))
-            {
-                AssetDatabase.DeleteAsset(path);
-            }
+            string file = Path.GetFileName(path);
+            if (file.StartsWith("Stage") || file.StartsWith("World_")) AssetDatabase.DeleteAsset(path);
         }
     }
 
@@ -183,28 +185,16 @@ public static partial class StageBuilder
             AssetDatabase.CreateAsset(s, SettingsPath);
         }
 
-        // 스테이지 목록이 비었거나 옛 구성(구간 이름이 다름)이면 코드 기본값으로 다시 채웁니다.
-        List<StageDef> defaults = DefineStages();
-        bool stale = s.stages == null || s.stages.Count != defaults.Count;
-        if (!stale)
-        {
-            for (int i = 0; i < defaults.Count; i++)
-            {
-                if (s.stages[i].number != defaults[i].number) { stale = true; break; }
-            }
-        }
-        if (s.stagesVersion < 4)
-        {
-            s.cloudScale = 3.6f;   // v4: 구름이 시야를 가려 크기를 줄임
-        }
+        if (s.stagesVersion < 4) s.cloudScale = 3.6f;   // v4: 구름이 시야를 가려 크기를 줄임
 
-        if (stale || s.stagesVersion != StagesVersion)
+        List<StageDef> defaults = DefineStages();
+        if (s.stages == null || s.stages.Count != defaults.Count || s.stagesVersion != StagesVersion)
         {
             s.stages = new List<StageEntry>();
             foreach (StageDef d in defaults)
             {
-                StageEntry e = new StageEntry { number = d.number, title = d.title, hint = d.hint, difficulty = d.difficulty };
-                e.segments.AddRange(d.segs);
+                StageEntry e = new StageEntry { number = d.number, title = d.title, hint = d.hint, difficulty = d.difficulty, width = d.width, height = d.height };
+                e.path.AddRange(d.segs);
                 s.stages.Add(e);
             }
             s.stagesVersion = StagesVersion;
@@ -214,9 +204,6 @@ public static partial class StageBuilder
 
         return s;
     }
-
-    // 스테이지 기본값을 바꿨을 때 올리면 설정 에셋의 스테이지 목록을 새 기본값으로 다시 채웁니다.
-    const int StagesVersion = 4;
 
     static FeedbackSettings LoadOrCreateFeedbackSettings()
     {
@@ -230,7 +217,7 @@ public static partial class StageBuilder
         return f;
     }
 
-    // 설정 에셋의 스테이지 값(이름 · 힌트 · 난이도 · 비탈 구간)을 코드 정의에 덮어씁니다.
+    // 설정 에셋의 스테이지 값(이름 · 힌트 · 난이도 · 폭 · 높이 · 길)을 코드 정의에 덮어씁니다.
     static void ApplyOverrides(List<StageDef> defs)
     {
         foreach (StageDef d in defs)
@@ -240,64 +227,117 @@ public static partial class StageBuilder
             if (!string.IsNullOrEmpty(e.title)) d.title = e.title;
             d.hint = e.hint;
             d.difficulty = e.difficulty;
-            if (e.segments != null && e.segments.Count > 0)
+            d.width = Mathf.Max(10f, e.width);
+            d.height = Mathf.Max(12f, e.height);
+            if (e.path != null && e.path.Count > 0)
             {
                 d.segs.Clear();
-                d.segs.AddRange(e.segments);
+                d.segs.AddRange(e.path);
             }
         }
     }
 
-    // 난이도(0~1)에 맞춰 범위(x = 쉬움, y = 어려움) 사이 값
     static float R(Vector2 range, float d01) => Mathf.Lerp(range.x, range.y, d01);
 
-    // ───────────────────────── 코스 ─────────────────────────
+    // ───────────────────────── 길 ─────────────────────────
 
-    // 맵 전체의 비탈 길(앞쪽 X를 따라 바닥 높이가 올라감)
+    // 맵 전체 길: 0.5m마다 중심점(바닥) · 방향 · 오르막 · 폭 · 높이를 미리 계산
     class Course
     {
         public float baseY;
-        public readonly List<Vector2> segs = new List<Vector2>();   // (가로 길이, 오르막 각도°)
+        public readonly List<Vector3> segs = new List<Vector3>();   // (길이, 오르막°, 좌우 꺾임°)
+        public readonly List<Vector2> sizes = new List<Vector2>();  // 그 구간 소속 스테이지의 (폭, 높이)
 
-        public float Length
+        const float Res = 0.5f;
+        Vector3[] pts;
+        float[] yaws, slopes, widths, heights;
+        public float Length { get; private set; }
+
+        public void Bake(float sizeBlend)
         {
-            get
+            Length = 0f;
+            foreach (Vector3 s in segs) Length += s.x;
+            int n = Mathf.CeilToInt(Length / Res) + 1;
+            pts = new Vector3[n];
+            yaws = new float[n];
+            slopes = new float[n];
+            widths = new float[n];
+            heights = new float[n];
+
+            Vector3 pos = new Vector3(0f, baseY, 0f);
+            float yaw = 0f;
+            int k = 0;
+            float segStart = 0f;
+            for (int i = 0; i < n; i++)
             {
-                float l = 0f;
-                foreach (Vector2 s in segs) l += s.x;
-                return l;
+                float s = i * Res;
+                while (k < segs.Count - 1 && s >= segStart + segs[k].x)
+                {
+                    segStart += segs[k].x;
+                    k++;
+                }
+                Vector3 seg = segs[k];
+                pts[i] = pos;
+                yaws[i] = yaw;
+                slopes[i] = seg.y;
+                widths[i] = sizes[k].x;
+                heights[i] = sizes[k].y;
+
+                float turnRate = seg.x > 0.01f ? seg.z / seg.x : 0f;
+                yaw += turnRate * Res;
+                Vector3 dir = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+                pos += dir * Res;
+                pos.y += Mathf.Tan(seg.y * Mathf.Deg2Rad) * Res;
             }
+
+            // 구간이 바뀔 때 폭 · 높이가 서서히 바뀌게(이동 평균)
+            int r = Mathf.Max(1, Mathf.RoundToInt(sizeBlend / Res));
+            widths = Smooth(widths, r);
+            heights = Smooth(heights, r);
         }
 
-        public float EndY => FloorY(Length);
-
-        public float FloorY(float x)
+        static float[] Smooth(float[] a, int r)
         {
-            float y = baseY;
-            float x0 = 0f;
-            foreach (Vector2 s in segs)
+            float[] o = new float[a.Length];
+            for (int i = 0; i < a.Length; i++)
             {
-                float dx = Mathf.Clamp(x - x0, 0f, s.x);
-                y += dx * Mathf.Tan(s.y * Mathf.Deg2Rad);
-                x0 += s.x;
-                if (x <= x0) break;
+                float sum = 0f;
+                int cnt = 0;
+                for (int j = Mathf.Max(0, i - r); j <= Mathf.Min(a.Length - 1, i + r); j++) { sum += a[j]; cnt++; }
+                o[i] = sum / cnt;
             }
-            return y;
+            return o;
         }
 
-        public float AngleAt(float x)
+        void Index(float s, out int i, out float t)
         {
-            float x0 = 0f;
-            foreach (Vector2 s in segs)
-            {
-                if (x <= x0 + s.x) return s.y;
-                x0 += s.x;
-            }
-            return segs.Count > 0 ? segs[segs.Count - 1].y : 0f;
+            float f = Mathf.Clamp(s, 0f, Length) / Res;
+            i = Mathf.Clamp(Mathf.FloorToInt(f), 0, pts.Length - 2);
+            t = f - i;
         }
+
+        public float Yaw(float s) { Index(s, out int i, out float t); return Mathf.LerpAngle(yaws[i], yaws[i + 1], t); }
+        public float Slope(float s) { Index(s, out int i, out float t); return Mathf.Lerp(slopes[i], slopes[i + 1], t); }
+        public float Width(float s) { Index(s, out int i, out float t); return Mathf.Lerp(widths[i], widths[i + 1], t); }
+        public float Height(float s) { Index(s, out int i, out float t); return Mathf.Lerp(heights[i], heights[i + 1], t); }
+        public Quaternion Rot(float s) => Quaternion.Euler(0f, Yaw(s), 0f);
+        public Vector3 Fwd(float s) => Rot(s) * Vector3.right;
+        public Vector3 Lat(float s) => Rot(s) * Vector3.forward;
+
+        public Vector3 Center(float s)
+        {
+            if (s < 0f) return pts[0] + Fwd(0f) * s;
+            if (s > Length) return pts[pts.Length - 1] + Fwd(Length) * (s - Length);
+            Index(s, out int i, out float t);
+            return Vector3.Lerp(pts[i], pts[i + 1], t);
+        }
+
+        public float FloorY(float s) => Center(s).y;
+        public float VerticalHeight(float s) => Height(s) / Mathf.Cos(Slope(s) * Mathf.Deg2Rad);
+        public Vector3 P(float s, float h, float z) => Center(s) + Vector3.up * h + Lat(s) * z;
     }
 
-    // 한 스테이지 구간을 그 구간의 '앞쪽 거리(x)'로 다루는 창. 기믹 위치는 모두 구간 안 거리로 씁니다.
+    // 한 스테이지 구간을 '구간 안 거리 x'로 다루는 창. 기믹 위치는 모두 구간 안 거리 · 옆(z) · 높이(h)로 씁니다.
     class View
     {
         public Course full;
@@ -306,10 +346,18 @@ public static partial class StageBuilder
 
         public float Length => length;
         public float X(float x) => x0 + x;
-        public float FloorY(float x) => full.FloorY(Mathf.Clamp(x0 + x, 0f, full.Length));
-        public float AngleAt(float x) => full.AngleAt(Mathf.Clamp(x0 + x, 0f, full.Length));
-        public float VerticalHeight(float x) => H / Mathf.Cos(AngleAt(x) * Mathf.Deg2Rad);
-        public Vector3 P(float x, float heightAboveFloor, float z) => new Vector3(x0 + x, FloorY(x) + heightAboveFloor, z);
+        public float FloorY(float x) => full.FloorY(x0 + x);
+        public float Slope(float x) => full.Slope(Mathf.Clamp(x0 + x, 0f, full.Length));
+        public float Width(float x) => full.Width(Mathf.Clamp(x0 + x, 0f, full.Length));
+        public float Half(float x) => Width(x) / 2f;
+        public float Height(float x) => full.Height(Mathf.Clamp(x0 + x, 0f, full.Length));
+        public float VerticalHeight(float x) => full.VerticalHeight(Mathf.Clamp(x0 + x, 0f, full.Length));
+        public Quaternion Rot(float x) => full.Rot(Mathf.Clamp(x0 + x, 0f, full.Length));
+        public Quaternion RotSloped(float x) => Rot(x) * Quaternion.Euler(0f, 0f, Slope(x));
+        public Vector3 Fwd(float x) => full.Fwd(Mathf.Clamp(x0 + x, 0f, full.Length));
+        public Vector3 Lat(float x) => full.Lat(Mathf.Clamp(x0 + x, 0f, full.Length));
+        public Vector3 P(float x, float h, float z) => full.P(x0 + x, h, z);
+        public float ClampZ(float x, float z, float margin) => Mathf.Clamp(z, -Half(x) + margin, Half(x) - margin);
     }
 
     class StageDef
@@ -317,14 +365,16 @@ public static partial class StageBuilder
         public int number;
         public string title;
         public string hint;
-        public float difficulty;          // 1~10
-        public string zone;               // 분위기 · 지형 이름(LookFor)
-        public List<Vector2> segs = new List<Vector2>();
+        public float difficulty;
+        public string zone;
+        public float width = 30f;
+        public float height = 45f;
+        public List<Vector3> segs = new List<Vector3>();
         public System.Action<Ctx> content;
 
-        public StageDef Seg(float length, float angle)
+        public StageDef Seg(float length, float slope, float turn = 0f)
         {
-            segs.Add(new Vector2(length, angle));
+            segs.Add(new Vector3(length, slope, turn));
             return this;
         }
     }
@@ -343,10 +393,10 @@ public static partial class StageBuilder
         public int checkpointCount;
 
         public float D01 => Mathf.Clamp01((def.difficulty - 1f) / 7f);
-        public float Hole => R(S.holeSize, D01);            // 바위 틈 크기(m)
-        public float CrossSpeed => R(S.crossSpeed, D01);    // 새 떼 · 바위 · 혜성 속도
-        public float CrossWait => R(S.crossInterval, D01);  // 다시 나오기까지
-        public float Drift => R(S.driftSpeed, D01);         // 흘러가는 구름 속도
+        public float Hole => R(S.holeSize, D01);
+        public float CrossSpeed => R(S.crossSpeed, D01);
+        public float CrossWait => R(S.crossInterval, D01);
+        public float Drift => R(S.driftSpeed, D01);
         public float Lift => R(S.windLift, D01);
         public float CrossWind => R(S.crossWind, D01);
     }
@@ -357,10 +407,11 @@ public static partial class StageBuilder
     {
         GameObject player = GameObject.Find("Player");
         GameObject cam = GameObject.Find("Main Camera");
+        Vector3 offset = S.cameraOffset;
 
         if (player != null)
         {
-            player.transform.position = new Vector3(0f, course.baseY + 2.4f, 0f);
+            player.transform.position = course.Center(0f) + Vector3.up * 2.4f;
             GameOverTrigger got = player.GetComponent<GameOverTrigger>();
             GameObject pad = GameObject.Find("FirstGroundStart");
             if (got != null && pad != null) SetField(got, "firstGroundStart", pad);
@@ -368,31 +419,10 @@ public static partial class StageBuilder
             if (mover != null) SetField(mover, "jumpForce", S.playerJumpForce);
         }
 
-        // 카메라: 닭 뒤 위쪽에서 살짝 내려다봐 앞 코스가 보이게
-        Vector3 offset = S.cameraOffset;
+        // 시네머신은 쓰지 않음: 카메라 위치 · 방향은 Mover 혼자 정함(두 주인 문제 해결)
         CinemachineCamera vcam = Object.FindAnyObjectByType<CinemachineCamera>();
-        if (vcam != null && player != null)
-        {
-            vcam.transform.position = player.transform.position + offset;
-            LensSettings lens = vcam.Lens;
-            lens.Dutch = 0f;
-            lens.FieldOfView = S.cameraFov;
-            lens.FarClipPlane = 1500f;
-            vcam.Lens = lens;
+        if (vcam != null) vcam.gameObject.SetActive(false);
 
-            // 카메라 방향은 Mover 한 곳에서만 정합니다(시네머신 LookAt과 동시에 돌리던 '두 주인' 문제 해결).
-            CinemachineHardLookAt lookAt = vcam.GetComponent<CinemachineHardLookAt>();
-            if (lookAt != null) lookAt.enabled = false;
-
-            CinemachineFollow follow = vcam.GetComponent<CinemachineFollow>();
-            if (follow != null)
-            {
-                follow.FollowOffset = offset;
-                TrackerSettings tracker = follow.TrackerSettings;
-                tracker.PositionDamping = S.cameraDamping;
-                follow.TrackerSettings = tracker;
-            }
-        }
         if (cam != null && player != null)
         {
             cam.transform.position = player.transform.position + offset;
@@ -403,8 +433,6 @@ public static partial class StageBuilder
                 camera.farClipPlane = 1500f;
                 camera.fieldOfView = S.cameraFov;
             }
-
-            // 카메라는 Mover 하나가 위치 · 방향을 모두 정합니다(시네머신 Brain은 끔 → '두 주인' 문제 없음)
             CinemachineBrain brain = cam.GetComponent<CinemachineBrain>();
             if (brain != null) brain.enabled = false;
 
@@ -414,11 +442,11 @@ public static partial class StageBuilder
                 SetField(mover, "cameraTransform", cam.transform);
                 SetField(mover, "cameraOffset", offset);
                 SetField(mover, "cameraPitch", S.cameraPitch);
+                SetField(mover, "baseFov", S.cameraFov);
                 SetField(mover, "cameraSmoothTime", Mathf.Clamp(S.cameraDamping.x * 0.15f, 0.02f, 0.5f));
             }
         }
 
-        // 결과 패널 · HUD
         EndingCredits ending = Object.FindAnyObjectByType<EndingCredits>();
         Transform canvas = cam != null ? cam.transform.Find("Canvas") : null;
         if (ending == null || canvas == null)
@@ -454,7 +482,6 @@ public static partial class StageBuilder
             UnityEventTools.AddVoidPersistentListener(rb.onClick, ending.Restart);
         }
 
-        // 구간 안내(배너 · HUD 스테이지 글자)
         GameObject infoGo = new GameObject("StageInfo");
         StageInfo info = infoGo.AddComponent<StageInfo>();
         float[] startX = new float[contexts.Count];
@@ -473,7 +500,6 @@ public static partial class StageBuilder
 
         if (scoreT != null)
         {
-            // HUD: 왼쪽 위(가운데는 닭과 길이 보이게 비움)
             TextMeshProUGUI score = scoreT.GetComponent<TextMeshProUGUI>();
             float baseSize = score.fontSize;
             PlaceTopLeft(score.rectTransform, new Vector2(36f, -28f), new Vector2(420f, 60f));
@@ -487,7 +513,6 @@ public static partial class StageBuilder
             hud.color = new Color(1f, 1f, 1f, 0.8f);
             SetField(info, "hudStageText", hud);
 
-            // 구간 배너: 화면 위쪽 가운데
             TextMeshProUGUI banner = Object.Instantiate(score, canvas);
             Object.DestroyImmediate(banner.GetComponent<ScoreMeter>());
             banner.name = "StageBanner";
@@ -575,24 +600,24 @@ public static partial class StageBuilder
         return t;
     }
 
-    // 복도 가로 전체를 덮는 트리거(태그 Trigger, 안 보임). x는 구간 안 거리.
+    // 복도 단면 전체를 덮는 트리거(태그 Trigger, 안 보임). 길 방향에 맞춰 놓임.
     static GameObject FullTrigger(Ctx ctx, string name, float x, float thickness)
     {
         float top = ctx.c.VerticalHeight(x);
-        GameObject g = Box(Group(ctx, "Triggers"), name, ctx.c.P(x, top / 2f, 0f), new Vector3(thickness, top, W), 0f, ctx.triggerMat);
+        GameObject g = Box(Group(ctx, "Triggers"), name, ctx.c.P(x, top / 2f, 0f), new Vector3(thickness, top, ctx.c.Width(x)), ctx.c.Rot(x), ctx.triggerMat);
         g.GetComponent<Collider>().isTrigger = true;
         g.GetComponent<Renderer>().enabled = false;
         g.tag = "Trigger";
         return g;
     }
 
-    static GameObject Box(Transform parent, string name, Vector3 pos, Vector3 scale, float angleZ, Material mat)
+    static GameObject Box(Transform parent, string name, Vector3 pos, Vector3 scale, Quaternion rot, Material mat)
     {
         GameObject g = GameObject.CreatePrimitive(PrimitiveType.Cube);
         g.name = name;
         g.transform.SetParent(parent, false);
         g.transform.position = pos;
-        g.transform.rotation = Quaternion.Euler(0f, 0f, angleZ);
+        g.transform.rotation = rot;
         g.transform.localScale = scale;
         g.GetComponent<Renderer>().sharedMaterial = mat;
         return g;

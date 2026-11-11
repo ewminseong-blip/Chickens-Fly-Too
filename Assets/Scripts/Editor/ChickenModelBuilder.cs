@@ -47,8 +47,7 @@ public static class ChickenModelBuilder
             Material yellowTip = Mat("Chicken_Wing_Tip", new Color(1f, 0.76f, 0.1f), 0.35f);
             Material orange = Mat("Chicken_Beak_Orange", new Color(1f, 0.55f, 0f), 0.45f);   // 시즌1 주황(1, 0.55, 0)
             Material red = Mat("Chicken_Comb_Red", new Color(0.93f, 0.13f, 0.12f), 0.45f);
-            Material eye = Mat("Chicken_Eye", new Color(0.04f, 0.04f, 0.06f), 0.95f);
-            Material shine = Mat("Chicken_Eye_Shine", Color.white, 0.9f, new Color(0.6f, 0.6f, 0.6f));
+            Material eye = Mat("Chicken_Eye", new Color(0.05f, 0.05f, 0.07f), 0.55f);
             Material blush = Mat("Chicken_Blush", new Color(1f, 0.55f, 0.65f), 0.3f);
 
             // 3) Model: 루트 기울기(Z -61.28°)를 되돌려 진행 방향 +X, 위 +Y로
@@ -60,21 +59,21 @@ public static class ChickenModelBuilder
             Part(PrimitiveType.Sphere, bodyPivot, "Body", white, new Vector3(0f, 0f, 0f), new Vector3(1.6f, 1.35f, 1.3f), new Vector3(0f, 0f, 8f));
             Part(PrimitiveType.Sphere, bodyPivot, "Belly", cream, new Vector3(0.38f, -0.18f, 0f), new Vector3(1.0f, 0.95f, 1.05f), Vector3.zero);
 
-            // 머리
-            Transform head = Empty(bodyPivot, "HeadPivot", new Vector3(0.72f, 0.72f, 0f));
-            Part(PrimitiveType.Sphere, head, "Head", white, Vector3.zero, Vector3.one * 0.95f, Vector3.zero);
-            Part(PrimitiveType.Sphere, head, "Comb_1", red, new Vector3(-0.12f, 0.5f, 0f), new Vector3(0.26f, 0.34f, 0.16f), Vector3.zero);
-            Part(PrimitiveType.Sphere, head, "Comb_2", red, new Vector3(0.08f, 0.56f, 0f), new Vector3(0.3f, 0.4f, 0.17f), Vector3.zero);
-            Part(PrimitiveType.Sphere, head, "Comb_3", red, new Vector3(0.27f, 0.47f, 0f), new Vector3(0.24f, 0.3f, 0.15f), Vector3.zero);
-            Part(PrimitiveType.Cube, head, "Beak_Top", orange, new Vector3(0.5f, -0.02f, 0f), new Vector3(0.32f, 0.12f, 0.22f), new Vector3(0f, 0f, -8f));
-            Part(PrimitiveType.Cube, head, "Beak_Bottom", orange, new Vector3(0.46f, -0.12f, 0f), new Vector3(0.24f, 0.08f, 0.18f), new Vector3(0f, 0f, 6f));
-            Part(PrimitiveType.Sphere, head, "Wattle", red, new Vector3(0.36f, -0.3f, 0f), new Vector3(0.14f, 0.24f, 0.12f), Vector3.zero);
+            // 머리: 귀여운 캐릭터의 기본(아기 얼굴 비율) - 큰 둥근 머리, 낮고 넓게 벌어진 점 눈, 작은 부리, 부품 수는 최소로
+            Transform head = Empty(bodyPivot, "HeadPivot", new Vector3(0.66f, 0.68f, 0f));
+            Part(PrimitiveType.Sphere, head, "Head", white, Vector3.zero, Vector3.one * 1.12f, Vector3.zero);
+            // 볏: 둥근 덩어리 2개가 겹친 부드러운 한 덩어리
+            Part(PrimitiveType.Sphere, head, "Comb_Back", red, new Vector3(-0.06f, 0.56f, 0f), new Vector3(0.3f, 0.3f, 0.2f), Vector3.zero);
+            Part(PrimitiveType.Sphere, head, "Comb_Front", red, new Vector3(0.14f, 0.6f, 0f), new Vector3(0.34f, 0.34f, 0.22f), Vector3.zero);
+            // 부리: 작은 둥근 부리 하나
+            Part(PrimitiveType.Sphere, head, "Beak", orange, new Vector3(0.56f, -0.06f, 0f), new Vector3(0.26f, 0.17f, 0.24f), new Vector3(0f, 0f, -10f));
             foreach (float side in new[] { 1f, -1f })
             {
                 string s = side > 0f ? "L" : "R";
-                Transform e = Part(PrimitiveType.Sphere, head, $"Eye_{s}", eye, new Vector3(0.32f, 0.14f, side * 0.3f), new Vector3(0.21f, 0.27f, 0.15f), Vector3.zero);
-                Part(PrimitiveType.Sphere, e, "Shine", shine, new Vector3(0.3f, 0.25f, side * 0.25f), Vector3.one * 0.36f, Vector3.zero);
-                Part(PrimitiveType.Sphere, head, $"Blush_{s}", blush, new Vector3(0.3f, -0.08f, side * 0.36f), new Vector3(0.16f, 0.09f, 0.05f), Vector3.zero);
+                // 점 눈: 머리 표면에 살짝 묻힌 납작한 검은 점(튀어나온 하이라이트 없음)
+                Part(PrimitiveType.Sphere, head, $"Eye_{s}", eye, new Vector3(0.43f, 0.08f, side * 0.3f), new Vector3(0.1f, 0.17f, 0.13f), new Vector3(0f, side * -35f, 0f));
+                // 볼터치: 얼굴 표면에 붙은 연한 분홍
+                Part(PrimitiveType.Sphere, head, $"Blush_{s}", blush, new Vector3(0.36f, -0.12f, side * 0.38f), new Vector3(0.08f, 0.1f, 0.16f), new Vector3(0f, side * -45f, 0f));
             }
 
             // 날개: 어깨 피벗에서 바깥(±Z)으로 둥근 깃털 3장(+Z = 왼쪽). 쉴 때는 살짝 접어 내림(18°)
@@ -93,16 +92,11 @@ public static class ChickenModelBuilder
                 }
             }
 
-            // 꽁지깃: 위 · 뒤로 둥근 깃털 부채
-            Transform tail = Empty(bodyPivot, "TailPivot", new Vector3(-0.7f, 0.32f, 0f));
-            for (int k = 0; k < 5; k++)
-            {
-                float spread = (k - 2f) * 14f;
-                Part(PrimitiveType.Sphere, tail, $"TailFeather_{k + 1}", k % 2 == 0 ? white : cream,
-                    new Vector3(-0.22f, 0.3f, (k - 2f) * 0.1f),
-                    new Vector3(0.28f, 0.8f - Mathf.Abs(k - 2f) * 0.1f, 0.14f),
-                    new Vector3(spread, 0f, 34f));
-            }
+            // 꽁지: 짧고 둥근 깃 뭉치(둥근 덩어리 3개가 위로 살짝 뻗침)
+            Transform tail = Empty(bodyPivot, "TailPivot", new Vector3(-0.72f, 0.3f, 0f));
+            Part(PrimitiveType.Sphere, tail, "Tail_Center", white, new Vector3(-0.12f, 0.18f, 0f), new Vector3(0.38f, 0.5f, 0.34f), new Vector3(0f, 0f, 30f));
+            Part(PrimitiveType.Sphere, tail, "Tail_L", white, new Vector3(-0.06f, 0.1f, 0.16f), new Vector3(0.32f, 0.4f, 0.28f), new Vector3(15f, 0f, 25f));
+            Part(PrimitiveType.Sphere, tail, "Tail_R", white, new Vector3(-0.06f, 0.1f, -0.16f), new Vector3(0.32f, 0.4f, 0.28f), new Vector3(-15f, 0f, 25f));
 
             // 다리: 엉덩이 피벗 → 다리 → 발가락 3개(앞으로)
             foreach (float side in new[] { 1f, -1f })

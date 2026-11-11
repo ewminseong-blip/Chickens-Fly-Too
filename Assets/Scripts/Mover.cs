@@ -8,7 +8,12 @@ public class Mover : MonoBehaviour
     [SerializeField] float jumpForce = 10f;
 
     [Header("수평 이동 (미끄러짐 방지)")]
+    [Tooltip("기본 속도(m/s): W를 누르면 여기까지는 빠르게(moveForce) 도달")]
     [SerializeField] float maxForwardSpeed = 10f;
+    [Tooltip("최고 속도(m/s): W를 계속 누르고 있으면 기본 속도를 넘어 여기까지 점점 빨라짐(기본 속도의 3배)")]
+    [SerializeField] float topSpeed = 30f;
+    [Tooltip("기본 속도를 넘은 뒤의 가속(m/s²). 2.8이면 10 → 30m/s까지 약 7초")]
+    [SerializeField] float overdriveAcceleration = 2.8f;
     [SerializeField] float maxBackwardSpeed = 4f;
     // W를 뗐을 때 감속(m/s²). 10m/s에서 약 1.4초 만에 멈춥니다.
     [SerializeField] float coastDeceleration = 7f;
@@ -34,7 +39,21 @@ public class Mover : MonoBehaviour
     [SerializeField] float cameraSmoothTime = 0.12f;
     [Tooltip("내려다보는 각도(°)")]
     [SerializeField] float cameraPitch = 10f;
+    [Header("속도감 (빨라질수록)")]
+    [SerializeField] float baseFov = 60f;
+    [Tooltip("최고 속도일 때 넓어지는 시야(°)")]
+    [SerializeField] float speedFovBoost = 16f;
+    [Tooltip("최고 속도일 때 카메라가 더 뒤로 물러나는 거리(m)")]
+    [SerializeField] float speedPullBack = 3f;
+    [Tooltip("화면을 스쳐 가는 바람 줄(최고 속도일 때 초당 개수, 0이면 끔)")]
+    [SerializeField] float speedLinesPerSecond = 140f;
     Vector3 cameraVelocity;
+    Camera cameraComponent;
+    ParticleSystem speedLines;
+
+    // 0 = 기본 속도 이하, 1 = 최고 속도
+    public float SpeedRatio => Mathf.Clamp01(Mathf.InverseLerp(maxForwardSpeed, topSpeed, horizontalSpeed));
+    public Vector3 Velocity => playerRigidbody != null ? playerRigidbody.linearVelocity : Vector3.zero;
 
     // 체크포인트에서 부활한 직후 공중에 멈춰 있는 시간(초)
     [SerializeField] float respawnHoldTime = 0.5f;
@@ -91,6 +110,8 @@ public class Mover : MonoBehaviour
         initialXAngle = initialAngles.x;
         initialZAngle = initialAngles.z;
 
+        path = CoursePath.Get();
+
         if (GameSession.HasCheckpoint)
         {
             transform.position = GameSession.CheckpointPosition;
@@ -108,9 +129,22 @@ public class Mover : MonoBehaviour
 
     void Start()
     {
-        // 첫 프레임에 카메라를 바로 제자리로(부활 · 시작 때 멀리서 날아오지 않게)
+        // 시작 · 부활 위치의 길 방향을 바라보고 시작(꺾이는 길)
+        if (path != null)
+        {
+            float s = path.Progress(transform.position, ref pathHint);
+            currentYAngle = targetYAngle = path.Yaw(s);
+            transform.rotation = Quaternion.Euler(initialXAngle, currentYAngle, initialZAngle);
+            playerRigidbody.rotation = transform.rotation;
+        }
+
         if (cameraTransform != null)
         {
+            cameraComponent = cameraTransform.GetComponent<Camera>();
+            if (cameraComponent != null) baseFov = cameraComponent.fieldOfView;
+            CreateSpeedLines();
+
+            // 첫 프레임에 카메라를 바로 제자리로(부활 · 시작 때 멀리서 날아오지 않게)
             cameraTransform.position = CameraTargetPosition();
             cameraTransform.rotation = CameraTargetRotation();
         }
@@ -120,8 +154,55 @@ public class Mover : MonoBehaviour
     {
         Vector3 facing = FacingDirection();
         Vector3 side = Vector3.Cross(Vector3.up, facing);
-        return transform.position + facing * cameraOffset.x + Vector3.up * cameraOffset.y + side * cameraOffset.z;
+        float back = cameraOffset.x - speedPullBack * speedFeel;   // 빨라질수록 살짝 뒤로
+        return transform.position + facing * back + Vector3.up * cameraOffset.y + side * cameraOffset.z;
     }
+
+    // 화면을 스쳐 지나가는 바람 줄(카메라 앞에서 생겨 뒤로 흘러감). 빠를수록 많이.
+    void CreateSpeedLines()
+    {
+        if (speedLinesPerSecond <= 0f || speedLines != null) return;
+
+        GameObject go = new GameObject("SpeedLines");
+        go.transform.SetParent(cameraTransform, false);
+        go.transform.localPosition = new Vector3(0f, 0f, 14f);
+        speedLines = go.AddComponent<ParticleSystem>();
+        speedLines.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        ParticleSystem.MainModule main = speedLines.main;
+        main.loop = true;
+        main.startLifetime = 0.45f;
+        main.startSpeed = 0f;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.12f);
+        main.startColor = new Color(1f, 1f, 1f, 0.5f);
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+        main.maxParticles = 300;
+
+        ParticleSystem.EmissionModule em = speedLines.emission;
+        em.rateOverTime = 0f;
+
+        ParticleSystem.ShapeModule shape = speedLines.shape;
+        shape.shapeType = ParticleSystemShapeType.Circle;
+        shape.radius = 7f;
+        shape.radiusThickness = 0.35f;   // 가운데(닭)는 비우고 테두리 쪽에서만
+
+        ParticleSystem.VelocityOverLifetimeModule vel = speedLines.velocityOverLifetime;
+        vel.enabled = true;
+        vel.space = ParticleSystemSimulationSpace.Local;
+        vel.x = 0f; vel.y = 0f; vel.z = -45f;
+
+        ParticleSystemRenderer r = go.GetComponent<ParticleSystemRenderer>();
+        r.renderMode = ParticleSystemRenderMode.Stretch;
+        r.velocityScale = 0.06f;
+        r.lengthScale = 1f;
+        Material mat = Resources.Load<Material>("FX/FX_Particle");
+        if (mat != null) r.sharedMaterial = mat;
+
+        speedLines.Play();
+    }
+
+    // 0~1: 기본 속도를 넘은 만큼(부드럽게)
+    float speedFeel;
 
     Quaternion CameraTargetRotation()
     {
@@ -137,8 +218,21 @@ public class Mover : MonoBehaviour
             return;
         }
 
+        speedFeel = Mathf.Lerp(speedFeel, SpeedRatio, 1f - Mathf.Exp(-Time.deltaTime * 4f));
+
         cameraTransform.position = Vector3.SmoothDamp(cameraTransform.position, CameraTargetPosition(), ref cameraVelocity, cameraSmoothTime);
         cameraTransform.rotation = CameraTargetRotation();
+
+        // 속도감: 시야가 넓어지고 바람 줄이 많아짐
+        if (cameraComponent != null)
+        {
+            cameraComponent.fieldOfView = baseFov + speedFovBoost * speedFeel;
+        }
+        if (speedLines != null)
+        {
+            ParticleSystem.EmissionModule em = speedLines.emission;
+            em.rateOverTime = speedLinesPerSecond * speedFeel * speedFeel;
+        }
     }
 
     void Update()
@@ -188,10 +282,10 @@ public class Mover : MonoBehaviour
         isViewFlipped = flipped;
     }
 
-    // 부스트 링: duration초 동안 수평 속도를 speed까지 끌어올립니다.
+    // 바람 고리(부스트): duration초 동안 수평 속도를 speed 또는 '지금 속도 + 6' 중 큰 값까지(최고 속도의 1.25배 이내)
     public void Boost(float speed, float duration)
     {
-        boostSpeed = Mathf.Max(speed, maxForwardSpeed);
+        boostSpeed = Mathf.Min(Mathf.Max(speed, horizontalSpeed + 6f), topSpeed * 1.25f);
         boostTimer = Mathf.Max(boostTimer, duration);
         horizontalSpeed = Mathf.Max(horizontalSpeed, boostSpeed);
     }
@@ -221,8 +315,13 @@ public class Mover : MonoBehaviour
             mouseX = 1f - mouseX;
         }
 
-        targetYAngle = Mathf.Lerp(minYAngle, maxYAngle, mouseX);
+        // 마우스 좌우는 '지금 위치의 길 방향' 기준 ±45°(길이 꺾여도 따라갈 수 있음)
+        float baseYaw = path != null ? path.Yaw(path.Progress(transform.position, ref pathHint)) : 0f;
+        targetYAngle = baseYaw + Mathf.Lerp(minYAngle, maxYAngle, mouseX);
     }
+
+    CoursePath path;
+    int pathHint = -1;
 
     void RotateByMouse()
     {
@@ -271,15 +370,17 @@ public class Mover : MonoBehaviour
             boostTimer -= dt;
         }
 
-        float forwardLimit = boostTimer > 0f ? boostSpeed : maxForwardSpeed;
+        // W를 계속 누르면: 기본 속도까지는 빠르게(moveForce), 그 뒤로는 천천히(overdrive) 최고 속도까지 계속 빨라짐
+        float forwardLimit = boostTimer > 0f ? Mathf.Max(boostSpeed, topSpeed) : topSpeed;
         bool forwardKey = Input.GetKey(KeyCode.W);
         bool backKey = Input.GetKey(KeyCode.S);
 
         if (forwardKey && !backKey)
         {
+            float accel = horizontalSpeed < maxForwardSpeed ? moveForce : overdriveAcceleration;
             horizontalSpeed = horizontalSpeed < 0f
                 ? Mathf.MoveTowards(horizontalSpeed, 0f, brakeDeceleration * dt)
-                : Mathf.MoveTowards(horizontalSpeed, forwardLimit, moveForce * dt);
+                : Mathf.MoveTowards(horizontalSpeed, forwardLimit, accel * dt);
         }
         else if (backKey && !forwardKey)
         {

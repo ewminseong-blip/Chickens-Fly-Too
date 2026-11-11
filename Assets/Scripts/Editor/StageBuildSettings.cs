@@ -8,11 +8,11 @@ using UnityEngine;
 [CreateAssetMenu(menuName = "Chicken Fly/Stage Build Settings", fileName = "StageBuildSettings")]
 public class StageBuildSettings : ScriptableObject
 {
-    [Header("복도 크기 (m)")]
-    [Min(8f)] public float corridorWidth = 24f;
-    [Min(10f)] public float corridorHeight = 26f;
+    [Header("경계")]
     [Tooltip("끄면 양옆 · 위 경계는 닿아도 죽지 않는 막(기본). 켜면 시즌1처럼 닿으면 죽음")]
     public bool deadlyBoundaries = false;
+    [Tooltip("구간이 바뀔 때 폭 · 높이가 서서히 바뀌는 거리(m)")]
+    public float sizeBlend = 25f;
 
     [Header("난이도 범위 (x = 쉬움, y = 어려움)")]
     [Tooltip("바위 · 구름 · 소행성 사이 틈 크기(m)")]
@@ -45,9 +45,9 @@ public class StageBuildSettings : ScriptableObject
     [Range(40f, 90f)] public float cameraFov = 60f;
 
     [Header("기타")]
-    [Tooltip("8스테이지 '초록 신호' 번개가 맞춰지는 속도(m/s). 플레이어 최고 속도와 같게")]
+    [Tooltip("8스테이지 번개 박자의 기본 속도(m/s). 실제로는 게이트에서 잰 속도로 맞춤")]
     public float syncedLightningSpeed = 10f;
-    [Tooltip("바람 고리(꼬리바람)를 지날 때 속도(m/s)")]
+    [Tooltip("바람 고리(꼬리바람)를 지날 때 최소 속도(m/s)")]
     public float boostRingSpeed = 15f;
     [Tooltip("상승 기류(열기둥)가 올려 주는 속도(m/s)")]
     public float bounceLaunchSpeed = 20f;
@@ -72,6 +72,10 @@ public class StageEntry
     public string title = "";
     public string hint = "";
     [Range(1f, 10f)] public float difficulty = 1f;
-    [Tooltip("x = 가로 길이(m), y = 오르막 각도(°). 첫 구간과 마지막 구간은 평평하게 두세요. 기믹 위치(x)는 코드 기준이라 길이를 크게 줄이면 기믹이 구간 밖으로 나갈 수 있습니다.")]
-    public List<Vector2> segments = new List<Vector2>();
+    [Tooltip("복도 폭(m). 좁을수록 정밀한 조작이 필요(구름 구간처럼 좁음 자체를 난이도로)")]
+    public float width = 30f;
+    [Tooltip("바닥에서 위 경계까지(m). 높을수록 자유롭게 날 수 있음")]
+    public float height = 45f;
+    [Tooltip("x = 길이(m), y = 오르막(°), z = 좌우로 꺾는 각도(°, +오른쪽 / -왼쪽). 기믹 위치는 코드 기준이라 길이를 크게 줄이면 기믹이 구간 밖으로 나갈 수 있습니다.")]
+    public List<Vector3> path = new List<Vector3>();
 }

@@ -4,18 +4,17 @@ using UnityEditor;
 using UnityEngine;
 
 // 스테이지(구간) 내용과 자연물 기믹.
-// 원칙: 그 높이에 있을 법한 자연물만 씁니다(인공물 없음).
-//   땅 · 숲 · 절벽 · 산 → 바위 무더기 · 바위 기둥 · 나무 · 쓰러진 통나무 · 바람 · 굴러오는 바위 · 낙석 · 독수리 떼
-//   구름층 → 흘러가는 구름 · 솟거나 내려오는 구름 · 갈매기 떼 · 우박 · 바람 고리(꼬리바람) · 상승 기류 · 번개
-//   우주(상상) → 소행성 · 혜성 · 수정 · 중력 이상 지대 · 우주 닭 떼 · UFO · 외계 생물 · 펄서 빛줄기 · 오로라
-// 충돌 판정은 보이는 모양보다 작게 잡아(보이지 않는 관용) 스치기만 해도 죽는 억울함을 줄입니다.
+// 원칙: 그 높이에 있을 법한 자연물만(인공물 없음). 우주는 상상력(행성 · 외계인 · 우주 닭 · UFO).
+// 위치는 모두 '구간 안 거리 x · 옆 z(+는 길의 로컬 Z쪽) · 바닥에서 높이 h'로 씁니다. 길이 꺾여도 그대로 따라갑니다.
+// 충돌 판정은 보이는 모양보다 작게(스치기만 해도 죽는 억울함 줄이기).
 public static partial class StageBuilder
 {
-    enum BirdKind { Eagle, Seagull, SpaceChicken, Ufo, Alien }
+    enum BirdKind { Eagle, Seagull, SpaceChicken, Ufo }
 
     // ───────────────────────── 스테이지 정의 ─────────────────────────
-    // 난이도: 1→6 상승, 7 · 8은 '어려워 보이지만 한 길(링 · 직진)만 따라가면 다 피해지는' 숨 고르기, 9 · 10은 6보다 높게.
-    // x는 그 구간 안의 거리(m). 구간끼리는 끊기지 않고 이어집니다.
+    // 난이도: 1→6 상승, 7 · 8은 숨 고르기(어려워 보이지만 한 길만 따라가면 다 피해짐), 9 · 10은 6보다 높게.
+    // 폭 · 높이: 넓은 곳은 자유 비행, 구름 구간(5 · 6)처럼 좁은 곳은 좁음 자체가 난이도(시즌1 구름 스테이지).
+    // Seg(길이, 오르막°, 좌우 꺾임°): 시즌1처럼 구간마다 왼쪽 · 오른쪽으로 꺾임.
 
     static List<StageDef> DefineStages()
     {
@@ -23,128 +22,136 @@ public static partial class StageBuilder
 
         list.Add(new StageDef
         {
-            number = 1, title = "First Flap", hint = "SPACE = FLAP   W = GO   S = STOP   MOUSE = TURN", difficulty = 1f, zone = "Meadow",
+            number = 1, title = "First Flap", hint = "SPACE = FLAP   W = GO (hold to speed up)   S = STOP   MOUSE = TURN", difficulty = 1f, zone = "Meadow",
+            width = 30f, height = 45f,
             content = ctx =>
             {
                 Sign(ctx, 10f, 12f, 0f, "SPACE : FLAP", 3f);
-                Sign(ctx, 22f, 8f, 0f, "W : GO     S : STOP", 2.2f);
-                RockGate(ctx, 45f, 2f, 2f + ctx.Hole, -10f, 10f);          // 아래 틈
-                RockGate(ctx, 110f, 11f, 11f + ctx.Hole, -10f, 10f);       // 위 틈
+                Sign(ctx, 22f, 8f, 0f, "HOLD W : FASTER", 2.4f);
+                RockGate(ctx, 45f, 2f, 2f + ctx.Hole, -12f, 12f);
+                RockGate(ctx, 110f, 13f, 13f + ctx.Hole, -12f, 12f);
                 Sign(ctx, 125f, 15f, 0f, "MOUSE : TURN", 3f);
-                RockGate(ctx, 150f, 3f, 21f, -11f, -11f + ctx.Hole);       // 왼쪽 틈
-                RockGate(ctx, 178f, 3f, 21f, 11f - ctx.Hole, 11f);         // 오른쪽 틈
+                RockGate(ctx, 150f, 3f, 25f, -14f, -14f + ctx.Hole);
+                RockGate(ctx, 182f, 3f, 25f, 14f - ctx.Hole, 14f);
             }
-        }.Seg(30, 0).Seg(60, 12).Seg(40, 0).Seg(50, 18).Seg(35, 0));
+        }.Seg(30, 0).Seg(60, 12, 12).Seg(40, 0, -22).Seg(50, 18).Seg(35, 0, 14));
 
         list.Add(new StageDef
         {
             number = 2, title = "Growing Forest", hint = "Trees grow when you pass by", difficulty = 2f, zone = "Forest",
+            width = 30f, height = 50f,
             content = ctx =>
             {
-                float[] zs = { -6f, 5f, -3f, 7f, -7f, 2f };
-                for (int i = 0; i < zs.Length; i++) Tree(ctx, 30f + i * 11f, zs[i], 1f);
-                Sign(ctx, 108f, 15f, 0f, "WHAT A NICE TREE!", 2.6f);   // 시즌1 표지판
-                foreach (Transform t in new[] { Tree(ctx, 126f, -5f, 0.9f), Tree(ctx, 134f, 6f, 0.9f), Tree(ctx, 142f, -1f, 0.9f) })
+                float[] zs = { -7f, 6f, -3f, 8f, -9f, 2f };
+                for (int i = 0; i < zs.Length; i++) Tree(ctx, 30f + i * 11f, zs[i], 1.1f);
+                Sign(ctx, 108f, 15f, 0f, "WHAT A NICE TREE!", 2.6f);
+                foreach (Transform t in new[] { Tree(ctx, 126f, -6f, 1f), Tree(ctx, 134f, 7f, 1f), Tree(ctx, 142f, -1f, 1f) })
                 {
-                    GrowTriggerFor(ctx, 116f, t, new Vector3(1.5f, 2f, 1.5f));
+                    GrowTriggerFor(ctx, 116f, t, new Vector3(1.6f, 2.4f, 1.6f));
                 }
-                float[] zs2 = { 6f, -6f, 0f, -8f, 8f, -2f, 4f };
-                for (int i = 0; i < zs2.Length; i++) Tree(ctx, 156f + i * 8.5f, zs2[i], 1.1f);
-                FallenLog(ctx, 222f, 8f);
+                float[] zs2 = { 7f, -7f, 0f, -10f, 10f, -3f, 5f };
+                for (int i = 0; i < zs2.Length; i++) Tree(ctx, 156f + i * 8.5f, zs2[i], 1.2f);
+                FallenLog(ctx, 222f, 9f);
             }
-        }.Seg(20, 0).Seg(80, 15).Seg(30, 0).Seg(80, 20).Seg(30, 0));
+        }.Seg(20, 0).Seg(80, 15, 20).Seg(30, 0).Seg(80, 20, -30).Seg(30, 0, 10));
 
         list.Add(new StageDef
         {
             number = 3, title = "Windy Cliffs", hint = "Ride the wind", difficulty = 3f, zone = "Cliffs",
+            width = 34f, height = 55f,
             content = ctx =>
             {
-                Wind(ctx, 22f, 78f, new Vector3(0f, ctx.Lift, 0f));           // 비탈을 도와주는 상승풍
-                Flock(ctx, BirdKind.Eagle, 95f, 15f, true, 3);                  // 까마귀 · 독수리가 가로질러 감
-                Wind(ctx, 108f, 165f, new Vector3(0f, ctx.Lift * 0.9f, 0f));
-                RockSpire(ctx, 125f, -6f, 3.5f); RockSpire(ctx, 140f, 6f, 3.5f); RockSpire(ctx, 155f, -2f, 3.5f);
-                Wind(ctx, 172f, 205f, new Vector3(0f, 0f, ctx.CrossWind));      // 옆바람
-                RockSpire(ctx, 185f, 7f, 3.5f); RockSpire(ctx, 198f, 2f, 3.5f);
-                Wind(ctx, 212f, 235f, new Vector3(0f, -ctx.Lift, 0f));          // 하강풍 + 아래 틈
-                RockGate(ctx, 228f, 2f, 2f + ctx.Hole, -10f, 10f);
+                Wind(ctx, 22f, 78f, new Vector3(0f, ctx.Lift, 0f), false);
+                Flock(ctx, BirdKind.Eagle, 95f, 18f, true, 3);
+                Wind(ctx, 108f, 165f, new Vector3(0f, ctx.Lift * 0.9f, 0f), false);
+                RockSpire(ctx, 125f, -7f, 4f); RockSpire(ctx, 140f, 7f, 4f); RockSpire(ctx, 155f, -2f, 4f);
+                Wind(ctx, 172f, 205f, new Vector3(0f, 0f, ctx.CrossWind), true);
+                RockSpire(ctx, 185f, 9f, 4f); RockSpire(ctx, 198f, 2f, 4f);
+                Wind(ctx, 212f, 235f, new Vector3(0f, -ctx.Lift, 0f), false);
+                RockGate(ctx, 228f, 2f, 2f + ctx.Hole, -14f, 14f);
             }
-        }.Seg(20, 0).Seg(60, 28).Seg(25, 0).Seg(60, 30).Seg(25, 0).Seg(40, 15).Seg(25, 0));
+        }.Seg(20, 0).Seg(60, 28).Seg(25, 0, -20).Seg(60, 30).Seg(25, 0, 25).Seg(40, 15).Seg(25, 0, -5));
 
         list.Add(new StageDef
         {
             number = 4, title = "Rockfall Ridge", hint = "Boulders roll, eagles cross", difficulty = 4f, zone = "Mountain",
+            width = 30f, height = 50f,
             content = ctx =>
             {
                 RollingBoulder(ctx, 40f, 1f, 0f); RollingBoulder(ctx, 56f, -1f, 0.4f); RollingBoulder(ctx, 72f, 1f, 0.8f);
-                Rockfall(ctx, 88f, 100f, 132f, 6);
+                Rockfall(ctx, 88f, 100f, 132f, 7);
                 Flock(ctx, BirdKind.Eagle, 152f, 12f, true, 4);
-                Flock(ctx, BirdKind.Eagle, 174f, 18f, false, 4);
+                Flock(ctx, BirdKind.Eagle, 174f, 20f, false, 4);
                 RollingBoulder(ctx, 205f, -1f, 0.2f); RollingBoulder(ctx, 216f, 1f, 0.7f);
                 // 끝 무렵: 구름이 바닥까지 내려와 있음 = 구름 높이에 닿음(시즌1 구성)
                 for (float x = 228f; x < ctx.c.Length; x += 9f) CloudFloorRow(ctx, x);
                 CloudCluster(ctx, 245f, 18f, -7f, 0.8f, false);
                 CloudCluster(ctx, 258f, 22f, 6f, 0.9f, false);
             }
-        }.Seg(20, 0).Seg(70, 20).Seg(40, 0).Seg(70, 22).Seg(40, 0).Seg(30, 0));
+        }.Seg(20, 0).Seg(70, 20, 15).Seg(40, 0, -30).Seg(70, 22).Seg(40, 0, 20).Seg(30, 0));
 
         list.Add(new StageDef
         {
-            number = 5, title = "Drifting Clouds", hint = "Clouds drift, gulls fly", difficulty = 5f, zone = "CloudLayer",
+            // 좁은 구름 통로(시즌1 구름 스테이지처럼): 좁음 자체가 난이도
+            number = 5, title = "Drifting Clouds", hint = "A narrow cloud tunnel", difficulty = 5f, zone = "CloudLayer",
+            width = 20f, height = 24f,
             content = ctx =>
             {
-                DriftingCloud(ctx, 45f, 8f, 1f, 0f); DriftingCloud(ctx, 58f, 16f, -1f, 0.3f); DriftingCloud(ctx, 72f, 11f, 1f, 0.6f);
-                HeadOnFlock(ctx, BirdKind.Seagull, 108f, 12f, 3);
+                DriftingCloud(ctx, 45f, 7f, 1f, 0f); DriftingCloud(ctx, 58f, 15f, -1f, 0.3f); DriftingCloud(ctx, 72f, 10f, 1f, 0.6f);
+                HeadOnFlock(ctx, BirdKind.Seagull, 108f, 11f, 3);
                 Checkpoint(ctx, 128f);
-                DriftingCloud(ctx, 150f, 9f, -1f, 0.2f); DriftingCloud(ctx, 165f, 17f, 1f, 0.5f);
-                Flock(ctx, BirdKind.Seagull, 190f, 13f, true, 5);
-                DescendingCloud(ctx, 215f, 238f, 0f, -11f);   // 위에서 내려와 위쪽 길을 막음 → 아래로
-                DescendingCloud(ctx, 225f, 250f, 6f, -11f);
+                DriftingCloud(ctx, 150f, 8f, -1f, 0.2f); DriftingCloud(ctx, 165f, 16f, 1f, 0.5f);
+                Flock(ctx, BirdKind.Seagull, 190f, 12f, true, 4);
+                DescendingCloud(ctx, 215f, 238f, 0f, -9f);
+                DescendingCloud(ctx, 225f, 250f, 5f, -9f);
                 DriftingCloud(ctx, 272f, 10f, 1f, 0.1f);
             }
-        }.Seg(20, 0).Seg(60, 18).Seg(40, 0).Seg(60, 20).Seg(40, 0).Seg(50, 15).Seg(30, 0));
+        }.Seg(20, 0).Seg(60, 18, -15).Seg(40, 0).Seg(60, 20, 25).Seg(40, 0, -20).Seg(50, 15).Seg(30, 0, 10));
 
         list.Add(new StageDef
         {
-            number = 6, title = "Hailstorm", hint = "Ice falls from above", difficulty = 6f, zone = "InsideClouds",
+            number = 6, title = "Hailstorm", hint = "Tightest tunnel. Ice falls from above", difficulty = 6f, zone = "InsideClouds",
+            width = 18f, height = 22f,
             content = ctx =>
             {
                 Hail(ctx, 40f, 58f, 86f, 7);
-                CloudGate(ctx, 95f, 6f, 6f + ctx.Hole, -4f, 4f + ctx.Hole * 0.3f);
+                RockGate(ctx, 95f, 5f, 5f + ctx.Hole, -4f, 4f + ctx.Hole * 0.3f);
                 Checkpoint(ctx, 112f);
                 Hail(ctx, 120f, 136f, 166f, 9);
-                DescendingCloud(ctx, 172f, 195f, -5f, -10f);
-                DriftingCloud(ctx, 205f, 12f, 1f, 0.3f);
+                DescendingCloud(ctx, 172f, 195f, -4f, -8f);
+                DriftingCloud(ctx, 205f, 11f, 1f, 0.3f);
                 HeadOnFlock(ctx, BirdKind.Seagull, 214f, 9f, 3);
                 Hail(ctx, 222f, 236f, 262f, 8);
-                CloudGate(ctx, 270f, 3f, 3f + ctx.Hole, 2f - ctx.Hole, 2f);
+                RockGate(ctx, 270f, 3f, 3f + ctx.Hole, 2f - ctx.Hole, 2f);
             }
-        }.Seg(20, 0).Seg(60, 22).Seg(30, 0).Seg(60, 24).Seg(30, 0).Seg(60, 20).Seg(25, 0));
+        }.Seg(20, 0).Seg(60, 22, 20).Seg(30, 0, -20).Seg(60, 24).Seg(30, 0, -15).Seg(60, 20, 15).Seg(25, 0));
 
         list.Add(new StageDef
         {
             // 숨 고르기: 사방에서 구름이 솟고 내려오지만 가운데 높이의 '바람 고리 길'은 끝까지 비어 있음
             number = 7, title = "Ride the Tailwind", hint = "Follow the wind rings", difficulty = 4.5f, zone = "AboveClouds",
+            width = 26f, height = 30f,
             content = ctx =>
             {
-                const float laneH = 13f;   // 안전한 길: 바닥에서 13m, Z 0 (±5m)
+                const float laneH = 13f;
                 for (float x = 25f; x < ctx.c.Length - 25f; x += 22f)
                 {
                     WindRing(ctx, x, laneH, 0f);
                     RisingCloud(ctx, x - 14f, x + 6f, 0f, -5f, 9f);
-                    DescendingCloud(ctx, x - 12f, x + 9f, 0f, -4f);
-                    RisingCloud(ctx, x - 10f, x + 4f, -10.5f, 0f, 16f);
-                    RisingCloud(ctx, x - 10f, x + 11f, 10.5f, 0f, 16f);
+                    DescendingCloud(ctx, x - 12f, x + 9f, 0f, -6f);
+                    RisingCloud(ctx, x - 10f, x + 4f, -ctx.c.Half(x) + 2.5f, 0f, 18f);
+                    RisingCloud(ctx, x - 10f, x + 11f, ctx.c.Half(x) - 2.5f, 0f, 18f);
                 }
                 for (float x = 60f; x < ctx.c.Length - 40f; x += 70f) Thermal(ctx, x, 0f);
-                // 멀리 기러기 떼(장식, 충돌 없음)
-                for (float x = 40f; x < ctx.c.Length; x += 90f) DecorFlock(ctx, BirdKind.Seagull, x, 30f, -60f);
+                for (float x = 40f; x < ctx.c.Length; x += 90f) DecorFlock(ctx, BirdKind.Seagull, x, 34f, -60f);
             }
-        }.Seg(20, 0).Seg(80, 12).Seg(40, 0).Seg(80, 12).Seg(40, 0).Seg(40, 0));
+        }.Seg(20, 0).Seg(80, 12, -20).Seg(40, 0).Seg(80, 12, 25).Seg(40, 0, -5).Seg(40, 0));
 
         list.Add(new StageDef
         {
-            // 숨 고르기: 번개가 정신없이 치지만 W를 꾹 누르고 직진하면 지나가는 순간마다 꺼져 있음
+            // 숨 고르기: 번개가 정신없이 치지만 W를 꾹 누르고 직진하면 지날 때마다 꺼져 있음(속도는 게이트에서 실측)
             number = 8, title = "Thunder Storm", hint = "Don't stop. Never stop.", difficulty = 5f, zone = "Storm",
+            width = 22f, height = 28f,
             content = ctx =>
             {
                 for (float x = 32f; x < ctx.c.Length - 22f; x += 12f)
@@ -153,78 +160,78 @@ public static partial class StageBuilder
                     LightningRow(ctx, x, S.syncedLightningSpeed, 0f);
                 }
             }
-        }.Seg(20, 0).Seg(120, 8).Seg(40, 0).Seg(100, 8).Seg(30, 0));
+        }.Seg(20, 0).Seg(120, 8).Seg(40, 0, -20).Seg(100, 8).Seg(30, 0, 20));
 
         list.Add(new StageDef
         {
             number = 9, title = "Upside-Down Space", hint = "The world turns over", difficulty = 7f, zone = "Space",
+            width = 34f, height = 55f,
             content = ctx =>
             {
                 GravityAnomaly(ctx, 35f, true);
                 Checkpoint(ctx, 80f);
-                AsteroidGate(ctx, 95f, 12f, 12f + ctx.Hole, -9f, 9f);
-                Comet(ctx, 118f, 15f, 1f);
-                AsteroidBelt(ctx, 140f, 5);
-                Wind(ctx, 160f, 180f, new Vector3(0f, -ctx.Lift, 0f));             // 중력 우물
-                AsteroidGate(ctx, 176f, 2f, 2f + ctx.Hole, -2f, 2f + ctx.Hole * 0.5f);
+                RockGate(ctx, 95f, 14f, 14f + ctx.Hole, -10f, 10f);
+                Comet(ctx, 118f, 18f, 1f);
+                AsteroidBelt(ctx, 140f, 6);
+                Wind(ctx, 160f, 180f, new Vector3(0f, -ctx.Lift, 0f), false);
+                RockGate(ctx, 176f, 2f, 2f + ctx.Hole, -2f, 2f + ctx.Hole * 0.5f);
                 Checkpoint(ctx, 205f);
-                HeadOnFlock(ctx, BirdKind.SpaceChicken, 232f, 13f, 4);              // 시즌1 기획의 우주 닭
-                Flock(ctx, BirdKind.Ufo, 252f, 16f, true, 2);
-                Comet(ctx, 266f, 9f, -1f);
-                AsteroidGate(ctx, 290f, 10f, 10f + ctx.Hole, 3f, 3f + ctx.Hole);
-                Alien(ctx, 310f, 18f, -8f);
+                HeadOnFlock(ctx, BirdKind.SpaceChicken, 232f, 14f, 5);
+                Flock(ctx, BirdKind.Ufo, 252f, 20f, true, 2);
+                Comet(ctx, 266f, 11f, -1f);
+                RockGate(ctx, 290f, 12f, 12f + ctx.Hole, 3f, 3f + ctx.Hole);
+                Alien(ctx, 310f, 22f, -9f);
             }
-        }.Seg(20, 0).Seg(40, 0).Seg(60, 20).Seg(40, 0).Seg(60, 25).Seg(40, 0).Seg(50, 20).Seg(30, 0));
+        }.Seg(20, 0).Seg(40, 0, 15).Seg(60, 20).Seg(40, 0, -30).Seg(60, 25).Seg(40, 0, 25).Seg(50, 20).Seg(30, 0, -10));
 
         list.Add(new StageDef
         {
-            // 9스테이지에서 뒤집힌 세상 그대로 이어서 시작 → 끝에서 다시 돌아오며 마지막 상승
+            // 9스테이지의 뒤집힌 세상 그대로 이어서 시작 → 끝에서 다시 돌아오며 마지막 상승
             number = 10, title = "To the Stars", hint = "Everything you learned", difficulty = 8f, zone = "DeepSpace",
+            width = 30f, height = 50f,
             content = ctx =>
             {
-                Wind(ctx, 22f, 55f, new Vector3(0f, 0f, -ctx.CrossWind));          // 태양풍
-                AsteroidSpire(ctx, 36f, -7f); AsteroidSpire(ctx, 48f, 3f);
-                AsteroidBelt(ctx, 70f, 6);
+                Wind(ctx, 22f, 55f, new Vector3(0f, 0f, -ctx.CrossWind), true);
+                RockSpire(ctx, 36f, -8f, 4.5f); RockSpire(ctx, 48f, 4f, 4.5f);
+                AsteroidBelt(ctx, 70f, 7);
                 HeadOnFlock(ctx, BirdKind.SpaceChicken, 95f, 12f, 5);
                 for (int i = 0; i < 4; i++) PulsarRow(ctx, 112f + i * 9f, i * 0.45f);
                 Checkpoint(ctx, 160f);
-                Flock(ctx, BirdKind.Ufo, 180f, 12f, false, 3);
-                Comet(ctx, 198f, 18f, 1f); Comet(ctx, 210f, 8f, -1f);
-                WindRing(ctx, 228f, 13f, 0f);
-                Alien(ctx, 240f, 10f, 6f);
-                AsteroidGate(ctx, 252f, 14f, 14f + ctx.Hole, -10f, -10f + ctx.Hole);
+                Flock(ctx, BirdKind.Ufo, 180f, 14f, false, 3);
+                Comet(ctx, 198f, 20f, 1f); Comet(ctx, 210f, 9f, -1f);
+                WindRing(ctx, 228f, 14f, 0f);
+                Alien(ctx, 240f, 12f, 7f);
+                RockGate(ctx, 252f, 16f, 16f + ctx.Hole, -13f, -13f + ctx.Hole);
                 Checkpoint(ctx, 275f);
-                GravityAnomaly(ctx, 300f, false);   // 세상이 다시 돌아옴 → 마지막 상승
-                Comet(ctx, 332f, 14f, 1f);
-                AsteroidGate(ctx, 352f, 4f, 4f + ctx.Hole, -5f, 5f);
-                Aurora(ctx, 362f, ctx.c.Length - 4f);   // 시즌1 마지막 네온(분홍 · 노랑)을 오로라로
+                GravityAnomaly(ctx, 300f, false);
+                Comet(ctx, 332f, 16f, 1f);
+                RockGate(ctx, 352f, 4f, 4f + ctx.Hole, -6f, 6f);
+                Aurora(ctx, 362f, ctx.c.Length - 4f);
             }
-        }.Seg(20, 0).Seg(30, 0).Seg(60, 22).Seg(40, 0).Seg(60, 25).Seg(40, 0).Seg(60, 28).Seg(40, 0).Seg(50, 15).Seg(30, 0).Seg(40, 0));
+        }.Seg(20, 0).Seg(30, 0, -15).Seg(60, 22).Seg(40, 0, 30).Seg(60, 25).Seg(40, 0, -30).Seg(60, 28).Seg(40, 0, 20).Seg(50, 15).Seg(30, 0, -10).Seg(40, 0));
 
         return list;
     }
 
     // ───────────────────────── 출발 · 도착 · 체크포인트 ─────────────────────────
 
-    // 출발 둥지(닿아도 안전: 이름 FirstGroundStart)
     static void StartNest(Ctx ctx)
     {
         Material bark = TexMat("Bark_Generated", C(0.39f, 0.24f, 0f), C(0.68f, 0.43f, 0.02f), 8f, 12f, 0.15f, 0.1f, 1.5f);
         GameObject pad = Prim(PrimitiveType.Cylinder, null, "FirstGroundStart", bark, false);
         pad.transform.position = ctx.c.P(0f, 0.25f, 0f);
         pad.transform.localScale = new Vector3(6f, 0.75f, 6f);
-        BoxCollider col = pad.AddComponent<BoxCollider>();   // 위가 평평한 상자 충돌
-        col.size = new Vector3(1f, 2f, 1f);
-        NestRing(null, pad.transform.position + Vector3.up * 0.5f, 2.9f, 1f);   // 크기가 바뀐 발판의 자식으로 두면 모양이 찌그러짐
+        pad.AddComponent<BoxCollider>().size = new Vector3(1f, 2f, 1f);
+        NestRing(null, pad.transform.position + Vector3.up * 0.5f, 2.9f, 1f);   // 크기가 바뀐 발판의 자식으로 두면 찌그러짐
     }
 
-    // 도착: 금빛 알이 있는 큰 둥지 + 빛기둥
     static void GoalNest(Ctx ctx)
     {
         float gx = ctx.c.Length - 16f;
         Transform goal = Group(ctx, "Goal");
 
-        GameObject trigger = Box(goal, "Ending_Trigger", ctx.c.P(gx, ctx.c.VerticalHeight(gx) / 2f, 0f), new Vector3(3f, ctx.c.VerticalHeight(gx), W), 0f, ctx.triggerMat);
+        float top = ctx.c.VerticalHeight(gx);
+        GameObject trigger = Box(goal, "Ending_Trigger", ctx.c.P(gx, top / 2f, 0f), new Vector3(3f, top, ctx.c.Width(gx)), ctx.c.Rot(gx), ctx.triggerMat);
         trigger.GetComponent<Collider>().isTrigger = true;
         trigger.GetComponent<Renderer>().enabled = false;
         trigger.tag = "Ending";
@@ -236,8 +243,7 @@ public static partial class StageBuilder
         pedestal.transform.position = ctx.c.P(gx + 7f, 2f, 0f);
         pedestal.transform.localScale = new Vector3(10f, 9f, 10f);
         pedestal.tag = "Ending";
-        Transform ring = NestRing(goal, nestPos, 4.5f, 2f);
-        ring.gameObject.tag = "Ending";
+        NestRing(goal, nestPos, 4.5f, 2f).gameObject.tag = "Ending";
 
         Material gold = Mat("Goal_GoldenEgg", C(1f, 0.84f, 0.3f), 0.9f, C(1f, 0.75f, 0.2f) * 1.8f);
         GameObject egg = Prim(PrimitiveType.Sphere, goal, "GoldenEgg", gold, false);
@@ -245,7 +251,6 @@ public static partial class StageBuilder
         egg.transform.localScale = new Vector3(2.4f, 3.1f, 2.4f);
         egg.tag = "Ending";
 
-        // 빛기둥(파티클)
         GameObject beam = new GameObject("LightBeam");
         beam.transform.SetParent(goal, false);
         beam.transform.position = nestPos;
@@ -265,10 +270,9 @@ public static partial class StageBuilder
         sh.rotation = new Vector3(-90f, 0f, 0f);
         beam.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat;
 
-        Sign(ctx, gx - 1f, ctx.c.VerticalHeight(gx) - 6f, 0f, "GOAL", 4f).tag = "Ending";
+        Sign(ctx, gx - 1f, Mathf.Min(top - 6f, 20f), 0f, "GOAL", 4f).tag = "Ending";
     }
 
-    // 둥지 테두리: 짚 색 캡슐을 원으로
     static Transform NestRing(Transform parent, Vector3 center, float radius, float thickness)
     {
         Transform g = new GameObject("Nest").transform;
@@ -288,7 +292,7 @@ public static partial class StageBuilder
         return g;
     }
 
-    // 체크포인트: 옆 바위 위 작은 둥지와 알(지나가면 알이 초록으로 빛남). order를 안 주면 구간 번호 기준으로 자동.
+    // 체크포인트: 옆 바위 위 작은 둥지와 알(지나가면 알이 초록으로 빛남)
     static void Checkpoint(Ctx ctx, float x, int order = -1)
     {
         ctx.checkpointCount++;
@@ -302,17 +306,16 @@ public static partial class StageBuilder
 
         GameObject spawn = new GameObject("RespawnPoint");
         spawn.transform.SetParent(g, false);
-        spawn.transform.position = ctx.c.P(x + 4f, H * 0.45f, 0f);
+        spawn.transform.position = ctx.c.P(x + 4f, Mathf.Min(12f, ctx.c.Height(x) * 0.45f), 0f);
         SetField(cp, "respawnPoint", spawn.transform);
 
-        // 장식(충돌 없음): 벽 쪽 바위 받침 + 둥지 + 알
-        float z = W / 2f - 2.5f;
-        Material rockMat = ctx.obstacleMat;
-        GameObject perch = MeshObject(g, "Perch", RockMesh(3), rockMat);
-        perch.transform.position = ctx.c.P(x, H * 0.3f, z);
+        float z = ctx.c.Half(x) - 2.5f;
+        float ph = Mathf.Min(10f, ctx.c.Height(x) * 0.3f);
+        GameObject perch = MeshObject(g, "Perch", RockMesh(3), ctx.obstacleMat);
+        perch.transform.position = ctx.c.P(x, ph, z);
         perch.transform.localScale = new Vector3(4f, 3f, 3.5f);
         perch.tag = "Trigger";
-        Vector3 nest = ctx.c.P(x, H * 0.3f + 1.4f, z);
+        Vector3 nest = ctx.c.P(x, ph + 1.4f, z);
         NestRing(g, nest, 1.1f, 0.6f).gameObject.tag = "Trigger";
         GameObject egg = Prim(PrimitiveType.Sphere, g, "Egg", Mat("Checkpoint_Egg", C(1f, 0.97f, 0.9f), 0.6f, C(0.25f, 0.25f, 0.2f)), false);
         egg.transform.position = nest + Vector3.up * 0.45f;
@@ -323,12 +326,15 @@ public static partial class StageBuilder
 
     // ───────────────────────── 땅 · 숲 · 절벽 · 산 ─────────────────────────
 
-    // 자연 장애물 덩어리: 보이지 않는 상자 충돌(작게) + 바위 / 구름 / 소행성 모양(크게)
-    static void NaturalBlock(Ctx ctx, Transform parent, Vector3 center, Vector3 size)
+    // 자연 장애물 덩어리: 보이지 않는 상자 충돌(작게) + 바위 / 구름 / 소행성 모양(크게). size = (앞뒤, 높이, 옆)
+    static void NaturalBlock(Ctx ctx, Transform parent, float x, float h, float z, Vector3 size)
     {
+        Quaternion rot = ctx.c.Rot(x);
+        Vector3 center = ctx.c.P(x, h, z);
         GameObject block = new GameObject("Block");
         block.transform.SetParent(parent, false);
         block.transform.position = center;
+        block.transform.rotation = rot;
         block.AddComponent<BoxCollider>().size = size;
 
         float s = Mathf.Clamp(Mathf.Min(size.y, size.z), 2.5f, 7f);
@@ -338,10 +344,11 @@ public static partial class StageBuilder
         {
             for (int k = 0; k < nz; k++)
             {
-                Vector3 p = center + new Vector3(
+                Vector3 local = new Vector3(
                     Random.Range(-0.3f, 0.3f),
                     (ny == 1 ? 0f : -size.y / 2f + size.y * (j + 0.5f) / ny) + Random.Range(-0.4f, 0.4f),
                     (nz == 1 ? 0f : -size.z / 2f + size.z * (k + 0.5f) / nz) + Random.Range(-0.4f, 0.4f));
+                Vector3 p = center + rot * local;
                 float sc = s * Random.Range(1.05f, 1.3f);
 
                 switch (ctx.look.wall)
@@ -369,7 +376,7 @@ public static partial class StageBuilder
                     {
                         GameObject r = MeshObject(block.transform, "Rock", RockMesh(Random.Range(0, 6)), ctx.obstacleMat);
                         r.transform.position = p;
-                        r.transform.rotation = Quaternion.Euler(Random.Range(-15f, 15f), Random.Range(0f, 360f), Random.Range(-15f, 15f));
+                        r.transform.rotation = rot * Quaternion.Euler(Random.Range(-15f, 15f), Random.Range(0f, 360f), Random.Range(-15f, 15f));
                         r.transform.localScale = new Vector3(Mathf.Max(size.x * 1.6f, sc * 0.8f), sc, sc);
                         break;
                     }
@@ -378,35 +385,29 @@ public static partial class StageBuilder
         }
     }
 
-    // 틈이 있는 자연 벽: (y0~y1: 바닥에서 높이, z0~z1) 자리만 비어 있음
+    // 틈이 있는 자연 벽: (y0~y1: 바닥에서 높이, z0~z1: 옆) 자리만 비어 있음. 범위는 그 위치의 폭 · 높이로 자름.
     static void RockGate(Ctx ctx, float x, float y0, float y1, float z0, float z1)
     {
         Transform g = Group(ctx, $"Gate_{x:0}");
         float top = ctx.c.VerticalHeight(x);
+        float half = ctx.c.Half(x);
         const float th = 2f;
         y0 = Mathf.Clamp(y0, 0f, top); y1 = Mathf.Clamp(y1, y0, top);
-        z0 = Mathf.Clamp(z0, -W / 2f, W / 2f); z1 = Mathf.Clamp(z1, z0, W / 2f);
+        z0 = Mathf.Clamp(z0, -half, half); z1 = Mathf.Clamp(z1, z0, half);
         float hy = y1 - y0;
 
-        if (y0 > 0.01f) NaturalBlock(ctx, g, ctx.c.P(x, y0 / 2f, 0f), new Vector3(th, y0, W));
-        if (y1 < top - 0.01f) NaturalBlock(ctx, g, ctx.c.P(x, (y1 + top) / 2f, 0f), new Vector3(th, top - y1, W));
-        if (z0 > -W / 2f + 0.01f) NaturalBlock(ctx, g, ctx.c.P(x, (y0 + y1) / 2f, (-W / 2f + z0) / 2f), new Vector3(th, hy, z0 + W / 2f));
-        if (z1 < W / 2f - 0.01f) NaturalBlock(ctx, g, ctx.c.P(x, (y0 + y1) / 2f, (z1 + W / 2f) / 2f), new Vector3(th, hy, W / 2f - z1));
+        if (y0 > 0.01f) NaturalBlock(ctx, g, x, y0 / 2f, 0f, new Vector3(th, y0, half * 2f));
+        if (y1 < top - 0.01f) NaturalBlock(ctx, g, x, (y1 + top) / 2f, 0f, new Vector3(th, top - y1, half * 2f));
+        if (z0 > -half + 0.01f) NaturalBlock(ctx, g, x, (y0 + y1) / 2f, (-half + z0) / 2f, new Vector3(th, hy, z0 + half));
+        if (z1 < half - 0.01f) NaturalBlock(ctx, g, x, (y0 + y1) / 2f, (z1 + half) / 2f, new Vector3(th, hy, half - z1));
     }
 
-    static void CloudGate(Ctx ctx, float x, float y0, float y1, float z0, float z1) => RockGate(ctx, x, y0, y1, z0, z1);
-    static void AsteroidGate(Ctx ctx, float x, float y0, float y1, float z0, float z1) => RockGate(ctx, x, y0, y1, z0, z1);
-
-    // 바닥에서 위 경계까지 솟은 바위 기둥
     static void RockSpire(Ctx ctx, float x, float z, float size)
     {
         float top = ctx.c.VerticalHeight(x);
-        NaturalBlock(ctx, Group(ctx, $"Spire_{x:0}"), ctx.c.P(x, top / 2f, z), new Vector3(size, top, size));
+        NaturalBlock(ctx, Group(ctx, $"Spire_{x:0}"), x, top / 2f, ctx.c.ClampZ(x, z, size / 2f + 1f), new Vector3(size, top, size));
     }
 
-    static void AsteroidSpire(Ctx ctx, float x, float z) => RockSpire(ctx, x, z, 4f);
-
-    // 코스 안 나무(닿으면 죽음): 줄기 · 수관
     static Transform Tree(Ctx ctx, float x, float z, float scale)
     {
         Material bark = TexMat("Bark_Generated", C(0.39f, 0.24f, 0f), C(0.68f, 0.43f, 0.02f), 8f, 12f, 0.15f, 0.1f, 1.5f);
@@ -414,7 +415,7 @@ public static partial class StageBuilder
         Material leaf2 = Mat($"{ctx.look.name}_LeafB", ctx.look.leafB, 0.15f);
         GameObject tree = new GameObject($"Tree_{x:0}");
         tree.transform.SetParent(Group(ctx, "Trees"), false);
-        tree.transform.position = ctx.c.P(x, 0f, z);
+        tree.transform.position = ctx.c.P(x, 0f, ctx.c.ClampZ(x, z, 3f));
         tree.transform.localScale = Vector3.one * scale;
 
         GameObject trunk = Prim(PrimitiveType.Cylinder, tree.transform, "Trunk", bark, true);
@@ -428,7 +429,6 @@ public static partial class StageBuilder
             float s = 6.5f - b * 1.4f;
             crown.transform.localScale = new Vector3(s, s * 0.85f, s);
         }
-        // 수관 충돌은 보이는 것보다 작게
         SphereCollider sc = tree.AddComponent<SphereCollider>();
         sc.center = new Vector3(0f, 10f, 0f);
         sc.radius = 2.6f;
@@ -443,31 +443,32 @@ public static partial class StageBuilder
         SetField(grow, "scaleMultiplier", multiplier);
     }
 
-    // 쓰러진 통나무: 복도를 가로질러 걸쳐 있음(위나 아래로 지나감)
     static void FallenLog(Ctx ctx, float x, float h)
     {
         Material bark = TexMat("Bark_Generated", C(0.39f, 0.24f, 0f), C(0.68f, 0.43f, 0.02f), 8f, 12f, 0.15f, 0.1f, 1.5f);
         GameObject log = Prim(PrimitiveType.Cylinder, Group(ctx, $"Log_{x:0}"), "FallenLog", bark, false);
         log.transform.position = ctx.c.P(x, h, 0f);
-        log.transform.rotation = Quaternion.Euler(90f, 0f, Random.Range(-6f, 6f));
-        log.transform.localScale = new Vector3(2.4f, W / 2f + 4f, 2.4f);
+        log.transform.rotation = ctx.c.Rot(x) * Quaternion.Euler(90f, 0f, Random.Range(-6f, 6f));
+        log.transform.localScale = new Vector3(2.4f, ctx.c.Half(x) + 4f, 2.4f);
         CapsuleCollider cc = log.AddComponent<CapsuleCollider>();
         cc.direction = 1;
         cc.radius = 0.42f;
         cc.height = 2f;
     }
 
-    // 바람 구역 + 바람 방향 줄무늬(파티클)
-    static void Wind(Ctx ctx, float xa, float xb, Vector3 accel)
+    // 바람 구역 + 바람 방향 줄무늬. accel은 길 기준(x 앞, y 위, z 옆). lateral이면 옆바람.
+    static void Wind(Ctx ctx, float xa, float xb, Vector3 accel, bool lateral)
     {
         float len = xb - xa;
         float xm = (xa + xb) / 2f;
+        Vector3 world = ctx.c.Fwd(xm) * accel.x + Vector3.up * accel.y + ctx.c.Lat(xm) * accel.z;
         GameObject trig = FullTrigger(ctx, $"Wind_{xa:0}", xm, len);
-        SetField(trig.AddComponent<WindArea>(), "acceleration", accel);
+        SetField(trig.AddComponent<WindArea>(), "acceleration", world);
 
         GameObject fx = new GameObject("WindStreaks");
         fx.transform.SetParent(trig.transform.parent, false);
-        fx.transform.position = ctx.c.P(xm, H / 2f, 0f);
+        fx.transform.position = ctx.c.P(xm, ctx.c.Height(xm) / 2f, 0f);
+        fx.transform.rotation = ctx.c.Rot(xm);
         ParticleSystem ps = fx.AddComponent<ParticleSystem>();
         ParticleSystem.MainModule main = ps.main;
         main.startLifetime = 1.6f;
@@ -481,11 +482,11 @@ public static partial class StageBuilder
         em.rateOverTime = Mathf.Clamp(len * 3f, 40f, 220f);
         ParticleSystem.ShapeModule shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Box;
-        shape.scale = new Vector3(len, H - 2f, W - 2f);
+        shape.scale = new Vector3(len, ctx.c.Height(xm) - 2f, ctx.c.Width(xm) - 2f);
         ParticleSystem.VelocityOverLifetimeModule vel = ps.velocityOverLifetime;
         vel.enabled = true;
         vel.space = ParticleSystemSimulationSpace.World;
-        Vector3 dir = accel.normalized * 9f;
+        Vector3 dir = world.normalized * 9f;
         vel.x = dir.x; vel.y = dir.y; vel.z = dir.z;
         ParticleSystemRenderer r = fx.GetComponent<ParticleSystemRenderer>();
         r.renderMode = ParticleSystemRenderMode.Stretch;
@@ -494,23 +495,29 @@ public static partial class StageBuilder
         r.sharedMaterial = ParticleMat;
     }
 
-    // 굴러오는 바위: 복도를 가로질러 굴러가고, 사라졌다가 다시 굴러옴(산사태)
+    // 옆으로 가로지르는 자연물(굴러오는 바위 · 구름 · 소행성)의 이동: 옆(-dir) → 옆(+dir)
+    static void Cross(Ctx ctx, GameObject go, float x, float dir, float speed, float wait, float phase, float roll, float fade)
+    {
+        float dist = ctx.c.Width(x) + 12f;
+        PathMover pm = go.AddComponent<PathMover>();
+        SetField(pm, "travel", ctx.c.Lat(x) * dir * dist);
+        SetField(pm, "speed", speed);
+        SetField(pm, "interval", wait);
+        SetField(pm, "startDelay", phase * dist / Mathf.Max(0.1f, speed));
+        SetField(pm, "rollRadius", roll);
+        SetField(pm, "fade", fade);
+    }
+
     static void RollingBoulder(Ctx ctx, float x, float dir, float phase)
     {
         GameObject b = MeshObject(Group(ctx, $"Boulder_{x:0}"), "RollingBoulder", RockMesh(Random.Range(0, 6)), ctx.obstacleMat);
         float size = 5f;
-        b.transform.position = ctx.c.P(x, size * 0.45f, -dir * (W / 2f + 4f));
+        b.transform.position = ctx.c.P(x, size * 0.45f, -dir * (ctx.c.Half(x) + 6f));
         b.transform.localScale = Vector3.one * size;
-        b.AddComponent<SphereCollider>().radius = 0.4f;   // 보이는 것(0.5)보다 작게
-        PathMover pm = b.AddComponent<PathMover>();
-        SetField(pm, "travel", new Vector3(0f, 0f, dir * (W + 8f)));
-        SetField(pm, "speed", ctx.CrossSpeed);
-        SetField(pm, "interval", ctx.CrossWait);
-        SetField(pm, "startDelay", phase * (W + 8f) / ctx.CrossSpeed);
-        SetField(pm, "rollRadius", size * 0.45f);
+        b.AddComponent<SphereCollider>().radius = 0.4f;
+        Cross(ctx, b, x, dir, ctx.CrossSpeed, ctx.CrossWait, phase, size * 0.45f, 0.08f);
     }
 
-    // 낙석: 지나가면 앞쪽 절벽 위에서 바위가 차례로 떨어짐(흔들림으로 예고)
     static void Rockfall(Ctx ctx, float triggerX, float fromX, float toX, int count)
     {
         Transform g = Group(ctx, $"Rockfall_{triggerX:0}");
@@ -518,21 +525,21 @@ public static partial class StageBuilder
         trig.transform.SetParent(g, true);
         DropOnTrigger drop = trig.AddComponent<DropOnTrigger>();
         List<Transform> rocks = new List<Transform>();
-        float[] zs = { -7f, 4f, -2f, 8f, -9f, 1f, 6f, -4f };
+        float[] zs = { -0.5f, 0.3f, -0.1f, 0.55f, -0.65f, 0.05f, 0.4f, -0.3f };
         for (int i = 0; i < count; i++)
         {
             float x = Mathf.Lerp(fromX, toX, count == 1 ? 0f : i / (float)(count - 1));
             GameObject r = MeshObject(g, $"FallingRock_{i}", RockMesh(Random.Range(0, 6)), ctx.obstacleMat);
-            r.transform.position = ctx.c.P(x, ctx.c.VerticalHeight(x) - 1f, zs[i % zs.Length]);
+            r.transform.position = ctx.c.P(x, ctx.c.VerticalHeight(x) - 1f, zs[i % zs.Length] * ctx.c.Width(x));
             r.transform.localScale = Vector3.one * Random.Range(3f, 4.2f);
             r.AddComponent<SphereCollider>().radius = 0.4f;
             rocks.Add(r.transform);
         }
         SetField(drop, "targets", rocks.ToArray());
         SetField(drop, "interval", R(S.hailInterval, ctx.D01) * 1.5f);
+        SetField(drop, "fallDistance", ctx.c.Height(fromX) + 6f);
     }
 
-    // 우박: 구름 속에서 얼음 조각이 차례로 떨어짐
     static void Hail(Ctx ctx, float triggerX, float fromX, float toX, int count)
     {
         Transform g = Group(ctx, $"Hail_{triggerX:0}");
@@ -541,13 +548,13 @@ public static partial class StageBuilder
         DropOnTrigger drop = trig.AddComponent<DropOnTrigger>();
         Material ice = Mat("Hail_Ice", C(0.8f, 0.92f, 1f), 0.95f, C(0.2f, 0.35f, 0.5f));
         List<Transform> shards = new List<Transform>();
-        float[] zs = { -8f, 4f, -2f, 9f, -6f, 1f, 7f, -10f, 3f };
+        float[] zs = { -0.4f, 0.2f, -0.1f, 0.42f, -0.3f, 0.05f, 0.33f, -0.45f, 0.15f };
         for (int i = 0; i < count; i++)
         {
             float x = Mathf.Lerp(fromX, toX, count == 1 ? 0f : i / (float)(count - 1));
             GameObject s = MeshObject(g, $"Hailstone_{i}", CrystalMesh(), ice);
-            s.transform.position = ctx.c.P(x, ctx.c.VerticalHeight(x) - 3f, zs[i % zs.Length]);
-            s.transform.rotation = Quaternion.Euler(180f, Random.Range(0f, 360f), 0f);   // 뾰족한 쪽이 아래
+            s.transform.position = ctx.c.P(x, ctx.c.VerticalHeight(x) - 3f, zs[i % zs.Length] * ctx.c.Width(x));
+            s.transform.rotation = Quaternion.Euler(180f, Random.Range(0f, 360f), 0f);
             s.transform.localScale = new Vector3(2.2f, 5f, 2.2f);
             CapsuleCollider cc = s.AddComponent<CapsuleCollider>();
             cc.radius = 0.18f;
@@ -556,45 +563,46 @@ public static partial class StageBuilder
         }
         SetField(drop, "targets", shards.ToArray());
         SetField(drop, "interval", R(S.hailInterval, ctx.D01));
+        SetField(drop, "fallDistance", ctx.c.Height(fromX) + 6f);
     }
 
     // ───────────────────────── 새 · 우주 생물 ─────────────────────────
 
-    // 가로지르는 떼: crossing=true면 왼쪽 → 오른쪽, false면 반대
     static void Flock(Ctx ctx, BirdKind kind, float x, float h, bool leftToRight, int count)
     {
         float dir = leftToRight ? 1f : -1f;
         Transform flock = new GameObject($"Flock_{kind}_{x:0}").transform;
         flock.SetParent(Group(ctx, "Flocks"), false);
-        flock.position = ctx.c.P(x, h, -dir * (W / 2f + 8f));
+        flock.position = ctx.c.P(x, Mathf.Min(h, ctx.c.Height(x) - 4f), -dir * (ctx.c.Half(x) + 8f));
         for (int i = 0; i < count; i++)
         {
-            // V자 대형(진행 방향이 +Z인 로컬 기준)
             float row = (i + 1) / 2;
             float side = i % 2 == 0 ? 1f : -1f;
             Bird(flock, new Vector3(side * row * 2.6f, Random.Range(-0.6f, 0.6f), -row * 2.8f), kind, 1f, true);
         }
+        float dist = ctx.c.Width(x) + 16f;
         PathMover pm = flock.gameObject.AddComponent<PathMover>();
-        SetField(pm, "travel", new Vector3(0f, 0f, dir * (W + 16f)));
+        SetField(pm, "travel", ctx.c.Lat(x) * dir * dist);
         SetField(pm, "speed", ctx.CrossSpeed * (kind == BirdKind.Ufo ? 1.3f : 1f));
         SetField(pm, "interval", ctx.CrossWait);
         SetField(pm, "startDelay", Random.Range(0f, 2f));
         SetField(pm, "faceDirection", true);
     }
 
-    // 정면으로 날아오는 떼(앞에서 닭 쪽으로): 레인을 비워 둬 피할 길이 있음
     static void HeadOnFlock(Ctx ctx, BirdKind kind, float x, float h, int count)
     {
         Transform flock = new GameObject($"HeadOn_{kind}_{x:0}").transform;
         flock.SetParent(Group(ctx, "Flocks"), false);
-        Vector3 from = ctx.c.P(x + 45f, h, 0f);
-        Vector3 to = ctx.c.P(x - 15f, h, 0f);
+        float hh = Mathf.Min(h, ctx.c.Height(x) - 4f);
+        Vector3 from = ctx.c.P(x + 45f, hh, 0f);
+        Vector3 to = ctx.c.P(x - 15f, hh, 0f);
         flock.position = from;
-        float[] zs = { -6f, 6f, 0f, -9f, 9f };
+        float half = ctx.c.Half(x) - 2f;
+        float[] zs = { -0.55f, 0.55f, 0f, -0.85f, 0.85f };
         float[] ys = { 0f, 2f, -3f, 4f, -1f };
         for (int i = 0; i < count; i++)
         {
-            Bird(flock, new Vector3(zs[i % zs.Length], ys[i % ys.Length], -i * 3f), kind, 1f, true);
+            Bird(flock, new Vector3(zs[i % zs.Length] * half, ys[i % ys.Length], -i * 3f), kind, 1f, true);
         }
         PathMover pm = flock.gameObject.AddComponent<PathMover>();
         SetField(pm, "travel", to - from);
@@ -603,7 +611,6 @@ public static partial class StageBuilder
         SetField(pm, "faceDirection", true);
     }
 
-    // 장식용 먼 새 떼(충돌 없음)
     static void DecorFlock(Ctx ctx, BirdKind kind, float x, float h, float z)
     {
         Transform flock = new GameObject($"DecorFlock_{x:0}").transform;
@@ -616,7 +623,7 @@ public static partial class StageBuilder
             Bird(flock, new Vector3(side * row * 3f, 0f, -row * 3f), kind, 1.2f, false);
         }
         PathMover pm = flock.gameObject.AddComponent<PathMover>();
-        SetField(pm, "travel", new Vector3(80f, 6f, 0f));
+        SetField(pm, "travel", ctx.c.Fwd(x) * 80f + Vector3.up * 6f);
         SetField(pm, "speed", 6f);
         SetField(pm, "interval", 4f);
         SetField(pm, "faceDirection", true);
@@ -658,25 +665,25 @@ public static partial class StageBuilder
             return bird;
         }
 
-        GameObject b = MeshObject(bird.transform, "Body", RockMesh(1), Mat($"Bird_{kind}_Body", body, 0.3f));
-        b.transform.localScale = new Vector3(1.1f, 0.9f, 2f);
+        GameObject b = Prim(PrimitiveType.Sphere, bird.transform, "Body", Mat($"Bird_{kind}_Body", body, 0.3f), false);
+        b.transform.localScale = new Vector3(1.1f, 0.95f, 1.9f);
         GameObject h = Prim(PrimitiveType.Sphere, bird.transform, "Head", Mat($"Bird_{kind}_Head", head, 0.3f), false);
-        h.transform.localPosition = new Vector3(0f, 0.4f, 1.05f);
-        h.transform.localScale = Vector3.one * 0.75f;
-        GameObject bk = Prim(PrimitiveType.Cube, bird.transform, "Beak", Mat($"Bird_{kind}_Beak", beak, 0.4f), false);
-        bk.transform.localPosition = new Vector3(0f, 0.35f, 1.55f);
-        bk.transform.localScale = new Vector3(0.2f, 0.16f, 0.45f);
-        foreach (float ex in new[] { -0.22f, 0.22f })
+        h.transform.localPosition = new Vector3(0f, 0.4f, 1.0f);
+        h.transform.localScale = Vector3.one * 0.85f;
+        GameObject bk = Prim(PrimitiveType.Sphere, bird.transform, "Beak", Mat($"Bird_{kind}_Beak", beak, 0.4f), false);
+        bk.transform.localPosition = new Vector3(0f, 0.32f, 1.48f);
+        bk.transform.localScale = new Vector3(0.22f, 0.16f, 0.36f);
+        foreach (float ex in new[] { -0.24f, 0.24f })
         {
-            GameObject eye = Prim(PrimitiveType.Sphere, bird.transform, "Eye", Mat("Bird_Eye", C(0.05f, 0.05f, 0.08f), 0.8f), false);
-            eye.transform.localPosition = new Vector3(ex, 0.55f, 1.32f);
-            eye.transform.localScale = Vector3.one * 0.14f;
+            GameObject eye = Prim(PrimitiveType.Sphere, bird.transform, "Eye", Mat("Bird_Eye", C(0.05f, 0.05f, 0.08f), 0.6f), false);
+            eye.transform.localPosition = new Vector3(ex, 0.52f, 1.3f);
+            eye.transform.localScale = new Vector3(0.14f, 0.16f, 0.08f);
         }
         if (kind == BirdKind.SpaceChicken)
         {
-            GameObject comb = Prim(PrimitiveType.Sphere, bird.transform, "Comb", Mat("Bird_Comb", C(0.9f, 0.12f, 0.1f), 0.4f), false);
-            comb.transform.localPosition = new Vector3(0f, 0.85f, 1.05f);
-            comb.transform.localScale = new Vector3(0.18f, 0.35f, 0.45f);
+            GameObject comb = Prim(PrimitiveType.Sphere, bird.transform, "Comb", Mat("Bird_Comb", C(0.93f, 0.13f, 0.12f), 0.4f), false);
+            comb.transform.localPosition = new Vector3(0f, 0.85f, 1.0f);
+            comb.transform.localScale = new Vector3(0.16f, 0.3f, 0.42f);
         }
 
         Material wingMat = Mat($"Bird_{kind}_Wing", wing, 0.3f);
@@ -685,23 +692,22 @@ public static partial class StageBuilder
             GameObject pivot = new GameObject(side < 0 ? "WingPivot_L" : "WingPivot_R");
             pivot.transform.SetParent(bird.transform, false);
             pivot.transform.localPosition = new Vector3(side * 0.45f, 0.25f, 0.1f);
-            GameObject w = Prim(PrimitiveType.Cube, pivot.transform, "Wing", wingMat, false);
-            w.transform.localPosition = new Vector3(side * 1.25f, 0f, 0f);
-            w.transform.localScale = new Vector3(2.5f, 0.08f, 1f);
+            GameObject w = Prim(PrimitiveType.Sphere, pivot.transform, "Wing", wingMat, false);
+            w.transform.localPosition = new Vector3(side * 1.2f, 0f, 0f);
+            w.transform.localScale = new Vector3(2.4f, 0.12f, 1f);
         }
         bird.AddComponent<BirdFlap>();
 
-        if (hazard) bird.AddComponent<SphereCollider>().radius = 1.0f;   // 날개 끝까지는 판정 없음
+        if (hazard) bird.AddComponent<SphereCollider>().radius = 1.0f;
         return bird;
     }
 
-    // 외계 생물: 초록 몸에 눈 달린 촉수가 둥둥 떠다님(위아래로 출렁)
     static void Alien(Ctx ctx, float x, float h, float z)
     {
         Transform g = Group(ctx, $"Alien_{x:0}");
         GameObject alien = new GameObject("Alien");
         alien.transform.SetParent(g, false);
-        alien.transform.position = ctx.c.P(x, h, z);
+        alien.transform.position = ctx.c.P(x, Mathf.Min(h, ctx.c.Height(x) - 4f), ctx.c.ClampZ(x, z, 3f));
         Material skin = NeonMat("Alien_Skin", C(0.48f, 0.99f, 0.2f), 0.6f);
         GameObject body = MeshObject(alien.transform, "Body", RockMesh(4), skin);
         body.transform.localScale = new Vector3(4f, 3.4f, 4f);
@@ -710,16 +716,16 @@ public static partial class StageBuilder
             GameObject stalk = Prim(PrimitiveType.Cylinder, alien.transform, "Stalk", skin, false);
             stalk.transform.localPosition = new Vector3(ex, 2.2f, -0.4f);
             stalk.transform.localScale = new Vector3(0.25f, 0.9f, 0.25f);
-            GameObject eye = Prim(PrimitiveType.Sphere, alien.transform, "Eye", Mat("Alien_Eye", C(1f, 1f, 1f), 0.9f), false);
+            GameObject eye = Prim(PrimitiveType.Sphere, alien.transform, "Eye", Mat("Alien_Eye", C(1f, 1f, 1f), 0.6f), false);
             eye.transform.localPosition = new Vector3(ex, 3.1f, -0.4f);
             eye.transform.localScale = Vector3.one * 0.9f;
-            GameObject pupil = Prim(PrimitiveType.Sphere, eye.transform, "Pupil", Mat("Bird_Eye", C(0.05f, 0.05f, 0.08f), 0.8f), false);
-            pupil.transform.localPosition = new Vector3(0f, 0f, -0.4f);
-            pupil.transform.localScale = Vector3.one * 0.45f;
+            GameObject pupil = Prim(PrimitiveType.Sphere, alien.transform, "Pupil", Mat("Bird_Eye", C(0.05f, 0.05f, 0.08f), 0.6f), false);
+            pupil.transform.localPosition = new Vector3(ex, 3.1f, -0.72f);
+            pupil.transform.localScale = new Vector3(0.45f, 0.45f, 0.2f);
         }
         alien.AddComponent<SphereCollider>().radius = 1.5f;
         Oscillator o = alien.AddComponent<Oscillator>();
-        SetField(o, "offset", new Vector3(0f, -8f, -z * 1.2f));
+        SetField(o, "offset", Vector3.down * 8f - ctx.c.Lat(x) * z * 1.2f);
         SetField(o, "period", 4f);
         SetField(o, "phase", Random.value);
     }
@@ -728,14 +734,8 @@ public static partial class StageBuilder
 
     static void DriftingCloud(Ctx ctx, float x, float h, float dir, float phase)
     {
-        Transform cloud = CloudCluster(ctx, x, h, -dir * (W / 2f + 6f), 1f, true);
-        PathMover pm = cloud.gameObject.AddComponent<PathMover>();
-        float dist = W + 12f;
-        SetField(pm, "travel", new Vector3(0f, 0f, dir * dist));
-        SetField(pm, "speed", ctx.Drift);
-        SetField(pm, "interval", 0.5f);
-        SetField(pm, "startDelay", phase * dist / ctx.Drift);
-        SetField(pm, "fade", 0.15f);
+        Transform cloud = CloudCluster(ctx, x, Mathf.Min(h, ctx.c.Height(x) - 4f), -dir * (ctx.c.Half(x) + 6f), 1f, true);
+        Cross(ctx, cloud.gameObject, x, dir, ctx.Drift, 0.5f, phase, 0f, 0.15f);
     }
 
     static void RisingCloud(Ctx ctx, float triggerX, float cloudX, float z, float startH, float rise)
@@ -744,9 +744,11 @@ public static partial class StageBuilder
         CloudTrigger(ctx, triggerX, cloud, new Vector3(0f, rise, 0f));
     }
 
+    // 위에서 내려오는 구름: 높이가 높은 구간에서도 길을 막도록 시작 높이를 24m 이하로
     static void DescendingCloud(Ctx ctx, float triggerX, float cloudX, float z, float drop)
     {
-        Transform cloud = CloudCluster(ctx, cloudX, ctx.c.VerticalHeight(cloudX) - 2f, z, 1f, true);
+        float start = Mathf.Min(ctx.c.VerticalHeight(cloudX) - 2f, 24f);
+        Transform cloud = CloudCluster(ctx, cloudX, start, z, 1f, true);
         CloudTrigger(ctx, triggerX, cloud, new Vector3(0f, drop, 0f));
     }
 
@@ -768,7 +770,6 @@ public static partial class StageBuilder
         return group.transform;
     }
 
-    // 구름 바다: 바닥을 구름으로 덮음(= 구름 위로 올라왔다)
     static void CloudSea(Ctx ctx)
     {
         for (float x = 0f; x < ctx.c.Length; x += 9f) CloudFloorRow(ctx, x);
@@ -776,20 +777,21 @@ public static partial class StageBuilder
 
     static void CloudFloorRow(Ctx ctx, float x)
     {
-        // 바닥보다 살짝 아래에 깔아 위로 조금만 솟게(시야를 가리지 않게)
-        foreach (float z in new[] { -8f, 0f, 8f })
+        float half = ctx.c.Half(x);
+        foreach (float f in new[] { -0.65f, 0f, 0.65f })
         {
-            CloudCluster(ctx, x + Random.Range(-2f, 2f), -3.5f, z + Random.Range(-1.5f, 1.5f), 0.85f, false);
+            CloudCluster(ctx, x + Random.Range(-2f, 2f), -3.5f, f * half + Random.Range(-1.5f, 1.5f), 0.85f, false);
         }
     }
 
-    // 바람 고리(꼬리바람): 소용돌이치는 바람 입자 고리. 지나가면 잠깐 빨라짐
+    // 바람 고리(꼬리바람): 소용돌이치는 바람 입자 고리, 지나가면 빨라짐
     static void WindRing(Ctx ctx, float x, float h, float z)
     {
         Transform g = Group(ctx, $"WindRing_{x:0}");
         GameObject trig = new GameObject("WindRing");
         trig.transform.SetParent(g, false);
         trig.transform.position = ctx.c.P(x, h, z);
+        trig.transform.rotation = ctx.c.Rot(x);
         trig.tag = "Trigger";
         BoxCollider box = trig.AddComponent<BoxCollider>();
         box.isTrigger = true;
@@ -822,11 +824,10 @@ public static partial class StageBuilder
         SetField(ring, "visual", visual.transform);
     }
 
-    // 상승 기류(열기둥): 바닥 구름에서 따뜻한 공기가 솟아 닭을 위로 올려 줌
     static void Thermal(Ctx ctx, float x, float z)
     {
         Transform g = Group(ctx, $"Thermal_{x:0}");
-        GameObject trig = Box(g, "Thermal", ctx.c.P(x, 3f, z), new Vector3(6f, 6f, 6f), 0f, ctx.triggerMat);
+        GameObject trig = Box(g, "Thermal", ctx.c.P(x, 3f, z), new Vector3(6f, 6f, 6f), ctx.c.Rot(x), ctx.triggerMat);
         trig.GetComponent<Collider>().isTrigger = true;
         trig.GetComponent<Renderer>().enabled = false;
         trig.tag = "Trigger";
@@ -864,17 +865,18 @@ public static partial class StageBuilder
         FullTrigger(ctx, $"HazardSyncGate_{x:0}", x, 1f).AddComponent<HazardSyncGate>();
     }
 
-    // 번개 한 줄: 위에서 아래로 내리치는 지그재그 번개 3개 + 가로 번개 1개(같은 박자로 깜빡임)
     static void LightningRow(Ctx ctx, float x, float syncSpeed, float phase)
     {
         Transform g = Group(ctx, $"Lightning_{x:0}");
         float top = ctx.c.VerticalHeight(x);
+        float half = ctx.c.Half(x);
         Material bolt = Mat("Lightning_Bolt", C(1f, 0.97f, 0.85f), 0.9f, C(1f, 0.92f, 0.65f) * 2.2f);
         List<Transform> bolts = new List<Transform>();
-        foreach (float z in new[] { -8f, 0f, 8f })
+        foreach (float f in new[] { -0.65f, 0f, 0.65f })
         {
+            float z = f * half;
             List<Vector3> pts = new List<Vector3>();
-            int n = 6;
+            const int n = 6;
             for (int i = 0; i <= n; i++)
             {
                 float t = i / (float)n;
@@ -883,13 +885,13 @@ public static partial class StageBuilder
             bolts.Add(ZigZag(g, "Bolt", pts, bolt, 0.45f));
         }
         {
-            float hh = Random.Range(6f, top - 6f);
+            float hh = Random.Range(5f, top - 5f);
             List<Vector3> pts = new List<Vector3>();
-            int n = 6;
+            const int n = 6;
             for (int i = 0; i <= n; i++)
             {
                 float t = i / (float)n;
-                pts.Add(ctx.c.P(x, hh + (i == 0 || i == n ? 0f : Random.Range(-1.5f, 1.5f)), Mathf.Lerp(-W / 2f, W / 2f, t)));
+                pts.Add(ctx.c.P(x, hh + (i == 0 || i == n ? 0f : Random.Range(-1.5f, 1.5f)), Mathf.Lerp(-half, half, t)));
             }
             bolts.Add(ZigZag(g, "SheetLightning", pts, bolt, 0.4f));
         }
@@ -905,11 +907,11 @@ public static partial class StageBuilder
         }
     }
 
-    // 점들을 잇는 굵은 선(조각마다 트리거 충돌)
     static Transform ZigZag(Transform parent, string name, List<Vector3> pts, Material mat, float thickness)
     {
         Transform g = new GameObject(name).transform;
         g.SetParent(parent, false);
+        g.position = pts[0];
         for (int i = 0; i + 1 < pts.Count; i++)
         {
             Vector3 a = pts[i], b = pts[i + 1];
@@ -922,21 +924,20 @@ public static partial class StageBuilder
         return g;
     }
 
-    // 펄서 빛줄기(우주판 번개): 양옆 수정에서 가로로 쏘는 빛
     static void PulsarRow(Ctx ctx, float x, float phase)
     {
         Transform g = Group(ctx, $"Pulsar_{x:0}");
+        float half = ctx.c.Half(x);
         float hh = Random.Range(5f, ctx.c.VerticalHeight(x) - 5f);
         Material beam = NeonMat("Pulsar_Beam", C(0.45f, 0.2f, 0.99f), 2.5f);
         foreach (float side in new[] { -1f, 1f })
         {
             GameObject c = MeshObject(g, "PulsarCrystal", CrystalMesh(), NeonMat("Crystal_NeonPurple", C(0.45f, 0.2f, 0.99f), 2.2f));
-            c.transform.position = ctx.c.P(x, hh, side * (W / 2f + 1f));
-            c.transform.rotation = Quaternion.Euler(0f, 0f, 90f);
+            c.transform.position = ctx.c.P(x, hh, side * (half + 1f));
+            c.transform.rotation = ctx.c.Rot(x) * Quaternion.Euler(90f, 0f, 0f);
             c.transform.localScale = new Vector3(2f, 4f, 2f);
         }
-        List<Vector3> pts = new List<Vector3> { ctx.c.P(x, hh, -W / 2f), ctx.c.P(x, hh, W / 2f) };
-        Transform b = ZigZag(g, "PulsarBeam", pts, beam, 0.7f);
+        Transform b = ZigZag(g, "PulsarBeam", new List<Vector3> { ctx.c.P(x, hh, -half), ctx.c.P(x, hh, half) }, beam, 0.7f);
         TimedHazard th = b.gameObject.AddComponent<TimedHazard>();
         SetField(th, "offTime", R(S.lightningOff, ctx.D01));
         SetField(th, "warnTime", 0.45f);
@@ -947,7 +948,6 @@ public static partial class StageBuilder
         SetField(th, "offColor", C(0.2f, 0.12f, 0.35f));
     }
 
-    // 중력 이상 지대: 보라 소용돌이 + 수정 고리. 지나가면 세상이 뒤집힘(reverse=false면 원래대로)
     static void GravityAnomaly(Ctx ctx, float x, bool reverse)
     {
         Transform g = Group(ctx, $"GravityAnomaly_{x:0}");
@@ -956,19 +956,21 @@ public static partial class StageBuilder
         SetField(trig.AddComponent<ReverseGravity>(), "reverse", reverse);
 
         float top = ctx.c.VerticalHeight(x);
+        float half = ctx.c.Half(x);
         Material[] neon = NeonSet();
         for (int i = 0; i < 16; i++)
         {
             float a = i * Mathf.PI * 2f / 16f;
             GameObject c = MeshObject(g, "AnomalyCrystal", CrystalMesh(), neon[i % 2 == 0 ? 1 : 0]);
-            c.transform.position = ctx.c.P(x, top / 2f + Mathf.Sin(a) * (top / 2f - 1.5f), Mathf.Cos(a) * (W / 2f - 1f));
-            c.transform.rotation = Quaternion.LookRotation(Vector3.right, new Vector3(0f, Mathf.Sin(a), Mathf.Cos(a)));
+            c.transform.position = ctx.c.P(x, top / 2f + Mathf.Sin(a) * (top / 2f - 1.5f), Mathf.Cos(a) * (half - 1f));
+            c.transform.rotation = Quaternion.LookRotation(ctx.c.Fwd(x), Vector3.up * Mathf.Sin(a) + ctx.c.Lat(x) * Mathf.Cos(a));
             c.transform.localScale = new Vector3(1.2f, 3.2f, 1.2f);
         }
 
         GameObject fx = new GameObject("Swirl");
         fx.transform.SetParent(g, false);
         fx.transform.position = ctx.c.P(x, top / 2f, 0f);
+        fx.transform.rotation = ctx.c.Rot(x);
         ParticleSystem ps = fx.AddComponent<ParticleSystem>();
         ParticleSystem.MainModule main = ps.main;
         main.startLifetime = 2.5f;
@@ -981,7 +983,7 @@ public static partial class StageBuilder
         em.rateOverTime = 160f;
         ParticleSystem.ShapeModule sh = ps.shape;
         sh.shapeType = ParticleSystemShapeType.Circle;
-        sh.radius = W / 2f - 1f;
+        sh.radius = Mathf.Min(half, top / 2f) - 1f;
         sh.rotation = new Vector3(0f, 90f, 0f);
         ParticleSystem.VelocityOverLifetimeModule vel = ps.velocityOverLifetime;
         vel.enabled = true;
@@ -989,19 +991,19 @@ public static partial class StageBuilder
         vel.radial = -2f;
         fx.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat;
 
-        Sign(ctx, x - 12f, H * 0.7f, 0f, reverse ? "GRAVITY FLIP AHEAD" : "BACK TO NORMAL", 2.6f, g);
+        Sign(ctx, x - 12f, Mathf.Min(top * 0.6f, 20f), 0f, reverse ? "GRAVITY FLIP AHEAD" : "BACK TO NORMAL", 2.6f, g);
     }
 
-    // 혜성: 꼬리를 끌며 비스듬히 가로질러 날아감
     static void Comet(Ctx ctx, float x, float h, float dir)
     {
         Transform g = Group(ctx, $"Comet_{x:0}");
         GameObject comet = MeshObject(g, "Comet", RockMesh(5), ctx.obstacleMat);
-        comet.transform.position = ctx.c.P(x + 10f, h + 6f, -dir * (W / 2f + 10f));
+        float half = ctx.c.Half(x);
+        comet.transform.position = ctx.c.P(x + 10f, Mathf.Min(h, ctx.c.Height(x) - 6f) + 6f, -dir * (half + 10f));
         comet.transform.localScale = Vector3.one * 3.2f;
         comet.AddComponent<SphereCollider>().radius = 0.4f;
         PathMover pm = comet.AddComponent<PathMover>();
-        SetField(pm, "travel", new Vector3(-20f, -12f, dir * (W + 20f)));
+        SetField(pm, "travel", -ctx.c.Fwd(x) * 20f + Vector3.down * 12f + ctx.c.Lat(x) * dir * (half * 2f + 20f));
         SetField(pm, "speed", ctx.CrossSpeed * 1.4f);
         SetField(pm, "interval", ctx.CrossWait + 0.5f);
         SetField(pm, "startDelay", Random.Range(0f, 1.5f));
@@ -1022,30 +1024,24 @@ public static partial class StageBuilder
         tail.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat;
     }
 
-    // 소행성 띠: 여러 소행성이 천천히 가로질러 흘러감
     static void AsteroidBelt(Ctx ctx, float x, int count)
     {
         Transform g = Group(ctx, $"AsteroidBelt_{x:0}");
+        float top = ctx.c.Height(x);
         for (int i = 0; i < count; i++)
         {
             float dir = i % 2 == 0 ? 1f : -1f;
+            float xi = x + i * 4f;
             GameObject a = MeshObject(g, "DriftingAsteroid", RockMesh(Random.Range(0, 6)), ctx.obstacleMat);
             float size = Random.Range(3.5f, 5.5f);
-            a.transform.position = ctx.c.P(x + i * 4f, 4f + i * (H - 8f) / Mathf.Max(1, count - 1), -dir * (W / 2f + 6f));
+            a.transform.position = ctx.c.P(xi, 4f + i * (top - 8f) / Mathf.Max(1, count - 1), -dir * (ctx.c.Half(xi) + 6f));
             a.transform.localScale = Vector3.one * size;
             a.transform.rotation = Random.rotation;
             a.AddComponent<SphereCollider>().radius = 0.4f;
-            PathMover pm = a.AddComponent<PathMover>();
-            float dist = W + 12f;
-            SetField(pm, "travel", new Vector3(0f, 0f, dir * dist));
-            SetField(pm, "speed", ctx.Drift * 1.2f);
-            SetField(pm, "interval", 0.3f);
-            SetField(pm, "startDelay", i * 0.9f);
-            SetField(pm, "rollRadius", size * 0.6f);
+            Cross(ctx, a, xi, dir, ctx.Drift * 1.2f, 0.3f, i * 0.15f, size * 0.6f, 0.08f);
         }
     }
 
-    // 오로라: 시즌1 마지막 구간의 네온(분홍 · 노랑 · 초록)을 우주 오로라 커튼으로
     static void Aurora(Ctx ctx, float xa, float xb)
     {
         Transform g = Group(ctx, "Aurora");
@@ -1058,12 +1054,13 @@ public static partial class StageBuilder
         int i = 0;
         for (float x = xa; x < xb; x += 3.5f, i++)
         {
+            float top = ctx.c.Height(x);
             foreach (float side in new[] { -1f, 1f })
             {
-                float wave = Mathf.Sin(x * 0.15f) * 1.5f;
                 GameObject strip = Prim(PrimitiveType.Cube, g, "AuroraStrip", mats[i % mats.Length], false);
-                strip.transform.position = ctx.c.P(x, H * 0.55f + wave, side * (W / 2f + 1.5f + Mathf.Cos(x * 0.2f)));
-                strip.transform.localScale = new Vector3(0.35f, H * 0.7f + Random.Range(-3f, 3f), 0.15f);
+                strip.transform.position = ctx.c.P(x, top * 0.55f + Mathf.Sin(x * 0.15f) * 1.5f, side * (ctx.c.Half(x) + 1.5f + Mathf.Cos(x * 0.2f)));
+                strip.transform.rotation = ctx.c.Rot(x);
+                strip.transform.localScale = new Vector3(0.35f, top * 0.7f + Random.Range(-3f, 3f), 0.15f);
                 Oscillator o = strip.AddComponent<Oscillator>();
                 SetField(o, "offset", new Vector3(0f, 2.5f, 0f));
                 SetField(o, "period", 3f);
@@ -1072,12 +1069,21 @@ public static partial class StageBuilder
         }
     }
 
+    // 별: 구간을 감싸는 상자(꺾인 길의 범위)에 고정된 반짝이
     static void StarField(Ctx ctx)
     {
+        Vector3 min = Vector3.one * float.MaxValue, max = Vector3.one * float.MinValue;
+        for (float x = 0f; x <= ctx.c.Length; x += 10f)
+        {
+            Vector3 p = ctx.c.P(x, 0f, 0f);
+            min = Vector3.Min(min, p);
+            max = Vector3.Max(max, p);
+        }
+        Vector3 size = max - min + new Vector3(160f, ctx.c.Height(0f) + 80f, 160f);
+
         GameObject fx = new GameObject("StarField");
         fx.transform.SetParent(ctx.root, false);
-        float len = ctx.c.Length;
-        fx.transform.position = ctx.c.P(len / 2f, H / 2f, 0f);
+        fx.transform.position = (min + max) / 2f + Vector3.up * ctx.c.Height(0f) / 2f;
         ParticleSystem ps = fx.AddComponent<ParticleSystem>();
         ParticleSystem.MainModule main = ps.main;
         main.loop = true;
@@ -1086,14 +1092,14 @@ public static partial class StageBuilder
         main.startSpeed = 0f;
         main.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.6f);
         main.startColor = new ParticleSystem.MinMaxGradient(C(1f, 1f, 1f), C(0.94f, 0.9f, 0.4f));
-        main.maxParticles = 1500;
+        main.maxParticles = 1800;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         ParticleSystem.EmissionModule em = ps.emission;
         em.rateOverTime = 0f;
-        em.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)1500) });
+        em.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)1800) });
         ParticleSystem.ShapeModule shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Box;
-        shape.scale = new Vector3(len + 60f, (ctx.c.FloorY(len) - ctx.c.FloorY(0f)) + H + 80f, 160f);
+        shape.scale = size;
         fx.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat;
     }
 
@@ -1102,7 +1108,7 @@ public static partial class StageBuilder
         GameObject go = new GameObject($"Sign_{text}");
         go.transform.SetParent(parent != null ? parent : Group(ctx, "Signs"), false);
         go.transform.position = ctx.c.P(x, h, z);
-        go.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+        go.transform.rotation = ctx.c.Rot(x) * Quaternion.Euler(0f, 90f, 0f);
         go.tag = "Text";
         TextMeshPro tmp = go.AddComponent<TextMeshPro>();
         tmp.text = text;
@@ -1110,7 +1116,7 @@ public static partial class StageBuilder
         tmp.fontStyle = FontStyles.Bold;
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.color = Color.white;
-        tmp.rectTransform.sizeDelta = new Vector2(W * 1.6f, 8f);
+        tmp.rectTransform.sizeDelta = new Vector2(ctx.c.Width(x) * 1.4f, 8f);
         return go;
     }
 }

@@ -6,8 +6,8 @@ using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
 // 월드 환경: 구간마다 지형 바닥 · 벽(바위 절벽 / 구름 벽 / 소행성 벽) · 장식 · 배경,
-// 맵 전체에 바리케이드 · 경계 · 위쪽 바람 띠 · 바깥 감시 · 분위기 전환(하늘 · 안개 · 빛 · 후처리).
-// 텍스처와 메시는 유니티 안에서 코드로 만들어 Assets/Art/…/Generated에 저장합니다.
+// 맵 전체에 길 정보 · 바리케이드 · 경계(길을 따라 휘는 곡면) · 위쪽 바람 띠 · 바깥 감시 · 분위기 전환.
+// 모든 위치는 '길 위 거리 x · 옆 z · 높이 h'로 계산해 왼쪽 · 오른쪽으로 꺾이는 길을 따라갑니다.
 // 색은 시즌1 머티리얼 색(초록 바닥 · 단계별 하늘 파랑 · 갈색 바위 · 우주 네온)을 기준으로 합니다.
 public static partial class StageBuilder
 {
@@ -17,7 +17,6 @@ public static partial class StageBuilder
 
     enum WallStyle { Rock, Cloud, Crystal }
 
-    // 구간(zone)의 모습 · 분위기
     class Look
     {
         public string name;
@@ -26,10 +25,8 @@ public static partial class StageBuilder
         public float treesPer100 = 6f, tuftsPer100 = 60f, wallHeight = 0.9f;
         public int mountains = 14, outsideClouds = 0;
         public bool planets, flowers, stars, cloudSea;
-        // 분위기(ZoneAtmosphere)
         public Color skyTint, skyGround, fog, ambientSky, ambientEquator, ambientGround, light = Color.white;
         public float exposure = 1.2f, atmosphere = 1f, fogStart = 70f, fogEnd = 320f, lightIntensity = 1.2f;
-        // 후처리
         public float bloom = 0.5f, saturation = 18f, postExposure = 0f, vignette = 0.2f, contrast = 8f;
     }
 
@@ -66,7 +63,7 @@ public static partial class StageBuilder
                 {
                     name = zone, groundA = C(0.51f, 0.6f, 0.14f), groundB = C(0.58f, 0.45f, 0.25f),
                     rockA = C(0.46f, 0.29f, 0.05f), rockB = C(0.62f, 0.5f, 0.35f), grassA = C(0.45f, 0.65f, 0.14f), grassB = C(0.3f, 0.7f, 0.18f),
-                    leafA = C(0.36f, 0.43f, 0.04f), leafB = C(0.25f, 0.55f, 0.1f), mountain = C(0.3f, 0.62f, 0.92f), treesPer100 = 4f, wallHeight = 1.05f,
+                    leafA = C(0.36f, 0.43f, 0.04f), leafB = C(0.25f, 0.55f, 0.1f), mountain = C(0.3f, 0.62f, 0.92f), treesPer100 = 4f, wallHeight = 0.95f,
                     skyTint = C(0.42f, 0.82f, 1f), skyGround = C(0.5f, 0.45f, 0.4f), fog = C(0.68f, 0.9f, 1f),
                     ambientSky = C(0.42f, 0.82f, 1f), ambientEquator = C(0.7f, 0.9f, 1f), ambientGround = C(0.4f, 0.35f, 0.25f)
                 };
@@ -98,7 +95,6 @@ public static partial class StageBuilder
                     light = C(0.9f, 0.93f, 1f), lightIntensity = 0.95f, postExposure = -0.1f
                 };
             case "AboveClouds":
-                // 구름 위: 시즌1 '하늘3' 짙은 파랑 + 구름 바다
                 return new Look
                 {
                     name = zone, wall = WallStyle.Cloud, cloudSea = true, groundA = C(1f, 1f, 1f), groundB = C(0.75f, 0.85f, 1f),
@@ -124,7 +120,7 @@ public static partial class StageBuilder
                     ambientSky = C(0.32f, 0.22f, 0.55f), ambientEquator = C(0.22f, 0.15f, 0.38f), ambientGround = C(0.08f, 0.05f, 0.14f),
                     light = C(0.88f, 0.84f, 1f), lightIntensity = 1.05f, bloom = 1.3f, vignette = 0.28f, saturation = 25f
                 };
-            default: // DeepSpace
+            default:
                 return new Look
                 {
                     name = "DeepSpace", wall = WallStyle.Crystal, stars = true, planets = true, groundA = C(0.1f, 0.04f, 0.16f), groundB = C(0.03f, 0.01f, 0.05f),
@@ -145,12 +141,11 @@ public static partial class StageBuilder
         Look look = ctx.look;
         Transform env = Group(ctx, "Environment");
 
-        // 바닥(지형 메시, 닿으면 죽음)
         Material groundMat = TexMat($"{look.name}_Ground", look.groundA, look.groundB, 6f, 0f, 0.25f, 0.15f, 1.2f);
         ctx.floorMat = groundMat;
         Mesh ground = GroundMesh(ctx);
         GameObject groundGo = MeshObject(env, "Ground", ground, groundMat);
-        groundGo.AddComponent<MeshCollider>().sharedMesh = ground;
+        groundGo.AddComponent<MeshCollider>().sharedMesh = ground;   // 바닥: 닿으면 죽음
 
         Material rockMat = TexMat($"{look.name}_Rock", look.rockA, look.rockB, 4f, 6f, 0.35f, 0.1f, 2f);
         switch (look.wall)
@@ -177,39 +172,43 @@ public static partial class StageBuilder
         if (look.planets) Planets(ctx, env);
         if (look.stars) StarField(ctx);
 
-        // 장애물 재질: 땅 = 시즌1 갈색 바위, 구름 = 구름, 우주 = 소행성
         ctx.obstacleMat = look.wall == WallStyle.Rock
             ? TexMat($"{look.name}_ObstacleRock", C(0.46f, 0.29f, 0.05f), C(0.68f, 0.43f, 0.02f), 3f, 5f, 0.3f, 0.2f, 2f)
             : rockMat;
     }
 
-    // 구간 바닥: 가운데는 거의 평평(공정함), 가장자리로 갈수록 울퉁불퉁
+    // 바닥: 길을 따라 휘는 띠. 가운데는 거의 평평(공정함), 가장자리로 갈수록 울퉁불퉁
     static Mesh GroundMesh(Ctx ctx)
     {
         float x0 = ctx.isFirst ? -14f : -1.5f;
         float x1 = ctx.c.Length + (ctx.isLast ? 8f : 1.5f);
-        float half = W / 2f + 3f;
         int nx = Mathf.CeilToInt((x1 - x0) / 2f);
-        int nz = Mathf.CeilToInt(half * 2f / 1.5f);
+        const int nz = 24;
 
         return GridMesh($"World_Ground_{ctx.def.number:00}", nx, nz,
             (i, j) =>
             {
                 float x = x0 + (x1 - x0) * i / nx;
-                float z = -half + half * 2f * j / nz;
+                float half = ctx.c.Half(x) + 3f;
+                float z = Mathf.Lerp(-half, half, j / (float)nz);
                 float gx = ctx.c.X(x);
-                float edge = Mathf.InverseLerp(W / 2f - 4f, half, Mathf.Abs(z));
+                float edge = Mathf.InverseLerp(half - 7f, half, Mathf.Abs(z));
                 float bump = (Fbm(gx * 0.12f, z * 0.12f, 3) - 0.5f) * Mathf.Lerp(0.2f, 1.6f, edge * edge);
-                return new Vector3(gx, ctx.c.FloorY(x) + bump - 0.05f, z);
+                return ctx.c.P(x, bump - 0.05f, z);
             },
-            (i, j) => new Vector2(ctx.c.X(x0 + (x1 - x0) * i / nx) / 8f, (-half + half * 2f * j / nz) / 8f),
+            (i, j) =>
+            {
+                float x = x0 + (x1 - x0) * i / nx;
+                float half = ctx.c.Half(x) + 3f;
+                return new Vector2(ctx.c.X(x) / 8f, Mathf.Lerp(-half, half, j / (float)nz) / 8f);
+            },
             Vector3.up);
     }
 
-    // 절벽 높이(이웃 구간과 이어지도록 맵 전체 x로 계산)
-    static float WallTop(Ctx ctx, float gx, float side)
+    static float WallTop(Ctx ctx, float x, float side)
     {
-        return H * ctx.look.wallHeight + (Fbm(gx * 0.025f + side * 31f, 4.2f, 3) - 0.5f) * 10f;
+        float gx = ctx.c.X(x);
+        return ctx.c.Height(x) * ctx.look.wallHeight + (Fbm(gx * 0.025f + side * 31f, 4.2f, 3) - 0.5f) * 10f;
     }
 
     static void CliffWall(Ctx ctx, Transform env, float side, Material rockMat)
@@ -217,7 +216,7 @@ public static partial class StageBuilder
         float x0 = ctx.isFirst ? -16f : -1.5f;
         float x1 = ctx.c.Length + (ctx.isLast ? 10f : 1.5f);
         int nx = Mathf.CeilToInt((x1 - x0) / 2.2f);
-        const int ny = 14;
+        const int ny = 16;
 
         Mesh m = GridMesh($"World_Cliff_{ctx.def.number:00}_{(side < 0 ? "L" : "R")}", nx, ny,
             (i, j) =>
@@ -225,16 +224,34 @@ public static partial class StageBuilder
                 float x = x0 + (x1 - x0) * i / nx;
                 float gx = ctx.c.X(x);
                 float t = j / (float)ny;
-                float top = WallTop(ctx, gx, side);
+                float top = WallTop(ctx, x, side);
                 float v = -2f + t * (top + 2f);
-                // 바깥쪽으로만 울퉁불퉁(경계 안으로 들어오지 않음) + 위로 갈수록 살짝 뒤로
+                // 바깥쪽으로만 울퉁불퉁(경계 안으로 들어오지 않음) + 위로 갈수록 살짝 뒤로 + 지층
                 float outward = Fbm(gx * 0.07f + side * 50f, t * 3.5f, 4) * 3.2f + Fbm(gx * 0.3f + side * 50f, t * 9f, 2) * 0.9f + t * t * 3f;
-                outward += Mathf.Abs(Mathf.Sin(v * 0.9f + Fbm(gx * 0.05f, 1f, 2) * 4f)) * 0.5f;   // 지층
-                return new Vector3(gx, ctx.c.FloorY(x) + v, side * (W / 2f + 1.2f + outward));
+                outward += Mathf.Abs(Mathf.Sin(v * 0.9f + Fbm(gx * 0.05f, 1f, 2) * 4f)) * 0.5f;
+                return ctx.c.P(x, v, side * (ctx.c.Half(x) + 1.2f + outward));
             },
-            (i, j) => new Vector2(ctx.c.X(x0 + (x1 - x0) * i / nx) / 9f, (j / (float)ny) * (H * ctx.look.wallHeight) / 9f),
-            new Vector3(0f, 0f, -side));
+            (i, j) => new Vector2(ctx.c.X(x0 + (x1 - x0) * i / nx) / 9f, (j / (float)ny) * 40f / 9f),
+            Vector3.zero);
+        FaceInward(m, ctx, side);
         MeshObject(env, $"Cliff_{(side < 0 ? "Left" : "Right")}", m, rockMat);
+    }
+
+    // 절벽 면이 복도 안쪽을 보도록 감기 방향을 맞춤(꺾이는 길이라 첫 삼각형의 옆 방향으로 판단)
+    static void FaceInward(Mesh m, Ctx ctx, float side)
+    {
+        Vector3[] v = m.vertices;
+        int[] t = m.triangles;
+        Vector3 n = Vector3.Cross(v[t[1]] - v[t[0]], v[t[2]] - v[t[0]]);
+        Vector3 inward = -ctx.c.Lat(0f) * side;
+        if (Vector3.Dot(n, inward) < 0f)
+        {
+            for (int q = 0; q < t.Length; q += 3) (t[q + 1], t[q + 2]) = (t[q + 2], t[q + 1]);
+            m.triangles = t;
+            m.RecalculateNormals();
+            m.RecalculateTangents();
+            EditorUtility.SetDirty(m);
+        }
     }
 
     static void CliffTop(Ctx ctx, Transform env, float side, Material rockMat)
@@ -244,23 +261,21 @@ public static partial class StageBuilder
         float x1 = ctx.c.Length + (ctx.isLast ? 10f : 1.5f);
         int nx = Mathf.CeilToInt((x1 - x0) / 3f);
         const int nz = 12;
-        float inner = W / 2f + 4f, outer = W / 2f + 70f;
         Material grass = TexMat($"{look.name}_CliffGrass", look.grassA, look.grassB, 5f, 0f, 0.2f, 0.12f, 1f);
 
         Mesh m = GridMesh($"World_CliffTop_{ctx.def.number:00}_{(side < 0 ? "L" : "R")}", nx, nz,
             (i, j) =>
             {
                 float x = x0 + (x1 - x0) * i / nx;
-                float gx = ctx.c.X(x);
                 float u = j / (float)nz;
-                float roll = (Fbm(gx * 0.05f, u * 4f + side, 3) - 0.5f) * 4f * u;
-                return new Vector3(gx, ctx.c.FloorY(x) + WallTop(ctx, gx, side) - 0.4f + roll, side * Mathf.Lerp(inner, outer, u));
+                float inner = ctx.c.Half(x) + 4f, outer = ctx.c.Half(x) + 70f;
+                float roll = (Fbm(ctx.c.X(x) * 0.05f, u * 4f + side, 3) - 0.5f) * 4f * u;
+                return ctx.c.P(x, WallTop(ctx, x, side) - 0.4f + roll, side * Mathf.Lerp(inner, outer, u));
             },
-            (i, j) => new Vector2(ctx.c.X(x0 + (x1 - x0) * i / nx) / 8f, (j / (float)nz) * (outer - inner) / 8f),
+            (i, j) => new Vector2(ctx.c.X(x0 + (x1 - x0) * i / nx) / 8f, (j / (float)nz) * 66f / 8f),
             Vector3.up);
         MeshObject(env, $"CliffTop_{(side < 0 ? "Left" : "Right")}", m, grass);
 
-        // 절벽 위 나무 · 돌(충돌 없음, 복도 밖)
         int trees = Mathf.RoundToInt(look.treesPer100 * ctx.c.Length / 100f);
         Material bark = TexMat("Bark_Generated", C(0.39f, 0.24f, 0f), C(0.68f, 0.43f, 0.02f), 8f, 12f, 0.15f, 0.1f, 1.5f);
         Material leafA = Mat($"{look.name}_LeafA", look.leafA, 0.15f);
@@ -270,9 +285,8 @@ public static partial class StageBuilder
         for (int k = 0; k < trees; k++)
         {
             float x = Random.Range(0f, ctx.c.Length);
-            float z = side * Random.Range(inner + 3f, inner + 35f);
-            float y = ctx.c.FloorY(x) + WallTop(ctx, ctx.c.X(x), side) - 0.6f;
-            DecorTree(tg, new Vector3(ctx.c.X(x), y, z), Random.Range(0.8f, 1.6f), bark, Random.value < 0.5f ? leafA : leafB);
+            Vector3 p = ctx.c.P(x, WallTop(ctx, x, side) - 0.6f, side * (ctx.c.Half(x) + Random.Range(7f, 40f)));
+            DecorTree(tg, p, Random.Range(0.8f, 1.6f), bark, Random.value < 0.5f ? leafA : leafB);
         }
 
         Transform rg = new GameObject($"Rocks_{(side < 0 ? "L" : "R")}").transform;
@@ -280,10 +294,8 @@ public static partial class StageBuilder
         for (int k = 0; k < trees / 2 + 4; k++)
         {
             float x = Random.Range(0f, ctx.c.Length);
-            float z = side * Random.Range(inner + 1f, inner + 30f);
-            float y = ctx.c.FloorY(x) + WallTop(ctx, ctx.c.X(x), side) - 0.5f;
             GameObject r = MeshObject(rg, "Rock", RockMesh(Random.Range(0, 6)), rockMat);
-            r.transform.position = new Vector3(ctx.c.X(x), y, z);
+            r.transform.position = ctx.c.P(x, WallTop(ctx, x, side) - 0.5f, side * (ctx.c.Half(x) + Random.Range(5f, 34f)));
             r.transform.localScale = new Vector3(Random.Range(1.5f, 4f), Random.Range(1f, 2.5f), Random.Range(1.5f, 4f));
             r.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
         }
@@ -311,7 +323,6 @@ public static partial class StageBuilder
         }
     }
 
-    // 바닥 가장자리 풀포기 + 꽃(충돌 없음)
     static void Tufts(Ctx ctx, Transform env)
     {
         Look look = ctx.look;
@@ -324,7 +335,7 @@ public static partial class StageBuilder
         {
             float side = Random.value < 0.5f ? -1f : 1f;
             float x = Random.Range(1f, ctx.c.Length - 1f);
-            float z = side * Random.Range(W / 2f - 3.5f, W / 2f + 1f);
+            float z = side * (ctx.c.Half(x) + Random.Range(-3.5f, 1f));
             float s = Random.Range(0.7f, 1.4f);
             parts.Add(new CombineInstance
             {
@@ -352,12 +363,12 @@ public static partial class StageBuilder
             float side = Random.value < 0.5f ? -1f : 1f;
             float x = Random.Range(1f, ctx.c.Length - 1f);
             GameObject f = Prim(PrimitiveType.Sphere, fg, "Flower", petals[Random.Range(0, petals.Length)], false);
-            f.transform.position = ctx.c.P(x, 0.45f, side * Random.Range(W / 2f - 3f, W / 2f + 0.5f));
+            f.transform.position = ctx.c.P(x, 0.45f, side * (ctx.c.Half(x) + Random.Range(-3f, 0.5f)));
             f.transform.localScale = Vector3.one * Random.Range(0.3f, 0.5f);
         }
     }
 
-    // 구름 벽: 양옆을 큰 구름으로 빈틈없이(충돌 없음, 경계는 보이지 않는 막)
+    // 구름 벽: 양옆을 구름으로 빈틈없이(충돌 없음, 경계는 보이지 않는 막) - 좁은 구름 통로(시즌1 구름 스테이지 느낌)
     static void CloudWalls(Ctx ctx, Transform env)
     {
         if (ctx.cloudPrefab == null) return;
@@ -367,16 +378,17 @@ public static partial class StageBuilder
         {
             for (float x = -1f; x < ctx.c.Length + 1f; x += 7.5f)
             {
-                for (float h = -2f; h < H + 6f; h += 8f)
+                float top = ctx.c.VerticalHeight(x);
+                for (float h = -2f; h < top + 6f; h += 8f)
                 {
-                    Vector3 p = ctx.c.P(x + Random.Range(-1.5f, 1.5f), h, side * (W / 2f + Random.Range(5f, 8f)));
+                    float xx = x + Random.Range(-1.5f, 1.5f);
+                    Vector3 p = ctx.c.P(xx, h, side * (ctx.c.Half(xx) + Random.Range(5f, 8f)));
                     SpawnCloud(ctx, g, p, Random.Range(S.cloudWallScale.x, S.cloudWallScale.y), false);
                 }
             }
         }
     }
 
-    // 우주 벽: 떠다니는 소행성 + 시즌1 네온색 수정(충돌 없음)
     static void CrystalWalls(Ctx ctx, Transform env, Material rockMat)
     {
         Transform g = new GameObject("AsteroidWalls").transform;
@@ -386,9 +398,11 @@ public static partial class StageBuilder
         {
             for (float x = -1f; x < ctx.c.Length + 1f; x += 5f)
             {
-                for (float h = 0f; h < H + 6f; h += 7f)
+                float top = ctx.c.VerticalHeight(x);
+                for (float h = 0f; h < top + 6f; h += 7f)
                 {
-                    Vector3 p = ctx.c.P(x + Random.Range(-2f, 2f), h + Random.Range(-2f, 2f), side * (W / 2f + Random.Range(4f, 9f)));
+                    float xx = x + Random.Range(-2f, 2f);
+                    Vector3 p = ctx.c.P(xx, h + Random.Range(-2f, 2f), side * (ctx.c.Half(xx) + Random.Range(4f, 9f)));
                     GameObject r = MeshObject(g, "Asteroid", RockMesh(Random.Range(0, 6)), rockMat);
                     r.transform.position = p;
                     r.transform.rotation = Random.rotation;
@@ -401,7 +415,7 @@ public static partial class StageBuilder
                     if (Random.value < 0.3f)
                     {
                         GameObject c = MeshObject(g, "Crystal", CrystalMesh(), neon[Random.Range(0, neon.Length)]);
-                        c.transform.position = p + new Vector3(0f, Random.Range(2f, 4f), -side * 1.5f);
+                        c.transform.position = p + Vector3.up * Random.Range(2f, 4f) - ctx.c.Lat(xx) * side * 1.5f;
                         c.transform.rotation = Quaternion.Euler(Random.Range(-25f, 25f), Random.Range(0f, 360f), Random.Range(-25f, 25f));
                         c.transform.localScale = new Vector3(1f, Random.Range(2.5f, 5f), 1f) * Random.Range(0.6f, 1.2f);
                     }
@@ -431,11 +445,10 @@ public static partial class StageBuilder
         {
             float side = k % 2 == 0 ? -1f : 1f;
             float x = Random.Range(0f, ctx.c.Length);
-            float z = side * Random.Range(120f, 280f);
             GameObject m = MeshObject(g, "Mountain", RockMesh(Random.Range(0, 6)), mat);
             float w = Random.Range(60f, 140f);
             float h = Random.Range(160f, 320f);
-            m.transform.position = new Vector3(ctx.c.X(x), ctx.c.FloorY(x) - 60f + h * 0.35f, z);
+            m.transform.position = ctx.c.P(x, -60f + h * 0.35f, side * Random.Range(130f, 290f));
             m.transform.localScale = new Vector3(w, h, w);
             m.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
             if (h > 240f)
@@ -457,12 +470,11 @@ public static partial class StageBuilder
         {
             float side = Random.value < 0.5f ? -1f : 1f;
             float x = Random.Range(0f, ctx.c.Length);
-            Vector3 p = ctx.c.P(x, Random.Range(-30f, 12f), side * Random.Range(W / 2f + 16f, 170f));
+            Vector3 p = ctx.c.P(x, Random.Range(-30f, 12f), side * Random.Range(ctx.c.Half(x) + 16f, 170f));
             SpawnCloud(ctx, g, p, Random.Range(10f, 26f), false);
         }
     }
 
-    // 우주: 시즌1 행성 색(파랑 · 주황 + 고리) + 상상 속 행성들
     static void Planets(Ctx ctx, Transform env)
     {
         Transform g = new GameObject("Planets").transform;
@@ -478,8 +490,7 @@ public static partial class StageBuilder
         {
             Material m = Mat($"Planet_{p.col.r:0.00}_{p.col.g:0.00}_{p.col.b:0.00}", p.col, 0.4f, p.col * 0.35f);
             GameObject s = Prim(PrimitiveType.Sphere, g, "Planet", m, false);
-            float x = ctx.c.Length * p.at;
-            s.transform.position = ctx.c.P(x, p.up, p.z);
+            s.transform.position = ctx.c.P(ctx.c.Length * p.at, p.up, p.z);
             s.transform.localScale = Vector3.one * p.size;
             if (p.ring)
             {
@@ -513,118 +524,120 @@ public static partial class StageBuilder
         Ctx first = contexts[0];
         Ctx last = contexts[contexts.Count - 1];
 
+        CoursePathData(g, course);
         StartNest(first);
         GoalNest(last);
 
-        // 앞 · 뒤 바리케이드(시즌1 Barricade처럼 갈색 바위 벽, 닿아도 죽지 않음)
         Material barricadeMat = TexMat("Barricade_Rock", C(0.46f, 0.29f, 0f), C(0.68f, 0.43f, 0.02f), 3f, 8f, 0.3f, 0.15f, 2.2f);
-        Barricade(g, -12f, course.baseY, barricadeMat, "Barricade_Back");
-        Barricade(g, course.Length + 1f, course.EndY, barricadeMat, "Barricade_Front");
+        Barricade(g, course, -12f, -1f, barricadeMat, "Barricade_Back");
+        Barricade(g, course, course.Length + 1f, 1f, barricadeMat, "Barricade_Front");
 
         Boundaries(g, course, first.triggerMat);
         TopWindBand(g, course, first.triggerMat);
-        StageBoundsGuard(g, course);
+        g.gameObject.AddComponent<StageBounds>();
         Atmosphere(g, contexts);
     }
 
-    // 양옆 · 위 경계(보이지 않는 막). 두께 4m, 구간끼리 4m씩 겹쳐 비탈이 꺾이는 곳에 틈이 없게.
+    // 런타임용 길 정보(CoursePath): 2m마다 중심점 · 방향 · 폭 · 높이
+    static void CoursePathData(Transform parent, Course course)
+    {
+        const float step = 2f;
+        int n = Mathf.CeilToInt(course.Length / step) + 1;
+        Vector3[] pts = new Vector3[n];
+        float[] yaw = new float[n], wid = new float[n], hei = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float s = Mathf.Min(i * step, course.Length);
+            pts[i] = course.Center(s);
+            yaw[i] = course.Yaw(s);
+            wid[i] = course.Width(s);
+            hei[i] = course.Height(s);
+        }
+        GameObject go = new GameObject("CoursePath");
+        go.transform.SetParent(parent, false);
+        CoursePath path = go.AddComponent<CoursePath>();
+        path.Configure(pts, yaw, wid, hei, step);
+        EditorUtility.SetDirty(path);
+    }
+
+    // 양옆 · 위 경계: 길을 따라 휘는 곡면(MeshCollider) → 꺾이는 곳에도 틈이 없음
     static void Boundaries(Transform parent, Course course, Material inv)
     {
         bool deadly = S != null && S.deadlyBoundaries;
         string tag = deadly ? "Untagged" : "Boundary";
-        const float thick = 4f, overlap = 4f;
         Transform g = new GameObject("Boundaries").transform;
         g.SetParent(parent, false);
 
-        float x = 0f;
-        int i = 0;
-        foreach (Vector2 s in course.segs)
-        {
-            float y0 = course.FloorY(x), y1 = course.FloorY(x + s.x);
-            float a = s.y;
-            float l = Mathf.Sqrt(s.x * s.x + (y1 - y0) * (y1 - y0));
-            Vector3 n = new Vector3(-Mathf.Sin(a * Mathf.Deg2Rad), Mathf.Cos(a * Mathf.Deg2Rad), 0f);
-            Vector3 mid = new Vector3(x + s.x / 2f, (y0 + y1) / 2f, 0f);
-            foreach (float side in new[] { -1f, 1f })
-            {
-                InvisibleWall(g, $"Side_{i}_{(side < 0 ? "L" : "R")}", mid + n * (H / 2f) + new Vector3(0f, 0f, side * (W / 2f + thick / 2f)), new Vector3(l + overlap, H + 12f, thick), a, inv, tag);
-            }
-            InvisibleWall(g, $"Top_{i}", mid + n * (H + thick / 2f), new Vector3(l + overlap, thick, W + thick * 2f), a, inv, tag);
-            x += s.x;
-            i++;
-        }
-
-        InvisibleWall(g, "Top_Back", new Vector3(-6f, course.baseY + H + thick / 2f, 0f), new Vector3(14f, thick, W + thick * 2f), 0f, inv, tag);
+        float s0 = -14f, s1 = course.Length + 4f;
+        int n = Mathf.CeilToInt((s1 - s0) / 2f);
         foreach (float side in new[] { -1f, 1f })
         {
-            InvisibleWall(g, "Side_Back", new Vector3(-6f, course.baseY + H / 2f, side * (W / 2f + thick / 2f)), new Vector3(14f, H + 12f, thick), 0f, inv, tag);
+            Mesh wall = GridMesh($"World_BoundarySide_{(side < 0 ? "L" : "R")}", n, 1,
+                (i, j) =>
+                {
+                    float s = Mathf.Lerp(s0, s1, i / (float)n);
+                    float top = course.VerticalHeight(Mathf.Clamp(s, 0f, course.Length)) + 8f;
+                    return course.P(s, j == 0 ? -4f : top, side * course.Width(Mathf.Clamp(s, 0f, course.Length)) / 2f);
+                },
+                (i, j) => Vector2.zero, Vector3.zero);
+            BoundaryObject(g, $"Boundary_Side_{(side < 0 ? "L" : "R")}", wall, tag);
         }
+
+        Mesh topMesh = GridMesh("World_BoundaryTop", n, 1,
+            (i, j) =>
+            {
+                float s = Mathf.Lerp(s0, s1, i / (float)n);
+                float sc = Mathf.Clamp(s, 0f, course.Length);
+                float half = course.Width(sc) / 2f + 2f;
+                return course.P(s, course.VerticalHeight(sc), j == 0 ? -half : half);
+            },
+            (i, j) => Vector2.zero, Vector3.down);
+        BoundaryObject(g, "Boundary_Top", topMesh, tag);
     }
 
-    static void InvisibleWall(Transform parent, string name, Vector3 pos, Vector3 scale, float angle, Material inv, string tag)
+    static void BoundaryObject(Transform parent, string name, Mesh mesh, string tag)
     {
-        GameObject b = Box(parent, name, pos, scale, angle, inv);
-        b.GetComponent<Renderer>().enabled = false;
-        b.tag = tag;
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        go.AddComponent<MeshCollider>().sharedMesh = mesh;
+        go.tag = tag;
     }
 
     // 시즌1 Barricade 같은 바위 벽: 큰 판(충돌) + 울퉁불퉁한 바위들(모양)
-    static void Barricade(Transform parent, float x, float floorY, Material mat, string name)
+    static void Barricade(Transform parent, Course course, float s, float dir, Material mat, string name)
     {
         Transform g = new GameObject(name).transform;
         g.SetParent(parent, false);
-        float dir = x < 1f ? -1f : 1f;
-        GameObject wall = Box(g, "Wall", new Vector3(x + dir * 2f, floorY + H * 0.6f, 0f), new Vector3(4f, H * 1.6f, W + 14f), 0f, mat);
+        float sc = Mathf.Clamp(s, 0f, course.Length);
+        float w = course.Width(sc), h = course.Height(sc);
+        GameObject wall = Box(g, "Wall", course.P(s + dir * 2f, h * 0.6f, 0f), new Vector3(4f, h * 1.6f, w + 14f), course.Rot(sc), mat);
         wall.tag = "Boundary";
-        for (int k = 0; k < 9; k++)
+        for (int k = 0; k < 10; k++)
         {
             GameObject r = MeshObject(g, "BarricadeRock", RockMesh(Random.Range(0, 6)), mat);
-            r.transform.position = new Vector3(x + dir * 1f, floorY + Random.Range(1f, H * 1.1f), Random.Range(-W / 2f, W / 2f));
+            r.transform.position = course.P(s + dir, Random.Range(1f, h * 1.1f), Random.Range(-w / 2f, w / 2f));
             r.transform.rotation = Random.rotation;
             r.transform.localScale = Vector3.one * Random.Range(4f, 8f);
         }
     }
 
-    // 위쪽 경계 바로 아래: 아래로 미는 바람 띠(단단한 막에 닿기 전에 부드럽게 밀어냄)
+    // 위쪽 경계 바로 아래: 아래로 미는 바람 띠(10m마다)
     static void TopWindBand(Transform parent, Course course, Material inv)
     {
         Transform g = new GameObject("TopWindBand").transform;
         g.SetParent(parent, false);
-        float x = 0f;
-        int i = 0;
-        foreach (Vector2 s in course.segs)
+        for (float s = 0f; s < course.Length; s += 10f)
         {
-            float y0 = course.FloorY(x), y1 = course.FloorY(x + s.x);
-            float a = s.y;
-            float l = Mathf.Sqrt(s.x * s.x + (y1 - y0) * (y1 - y0));
-            Vector3 n = new Vector3(-Mathf.Sin(a * Mathf.Deg2Rad), Mathf.Cos(a * Mathf.Deg2Rad), 0f);
-            Vector3 mid = new Vector3(x + s.x / 2f, (y0 + y1) / 2f, 0f);
-            GameObject band = Box(g, $"TopWind_{i}", mid + n * (H - 2f), new Vector3(l + 2f, 4f, W), a, inv);
+            float m = s + 5f;
+            GameObject band = Box(g, $"TopWind_{s:0}", course.P(m, course.VerticalHeight(m) - 2f, 0f),
+                new Vector3(11f, 4f, course.Width(m)), course.Rot(m) * Quaternion.Euler(0f, 0f, course.Slope(m)), inv);
             band.GetComponent<Renderer>().enabled = false;
             band.GetComponent<Collider>().isTrigger = true;
             band.tag = "Trigger";
             SetField(band.AddComponent<WindArea>(), "acceleration", new Vector3(0f, -32f, 0f));
-            x += s.x;
-            i++;
         }
     }
 
-    // 마지막 안전장치: 어떤 이유로든 맵 밖으로 나가면 다시 시작
-    static void StageBoundsGuard(Transform parent, Course course)
-    {
-        const float step = 2f;
-        int count = Mathf.CeilToInt(course.Length / step) + 1;
-        float[] heights = new float[count];
-        for (int k = 0; k < count; k++) heights[k] = course.FloorY(k * step);
-
-        GameObject go = new GameObject("StageBounds");
-        go.transform.SetParent(parent, false);
-        StageBounds bounds = go.AddComponent<StageBounds>();
-        bounds.Configure(heights, step, course.Length, W, H);
-        EditorUtility.SetDirty(bounds);
-    }
-
-    // 분위기 전환: 구간마다 하늘 · 안개 · 빛 · 후처리 값을 ZoneAtmosphere에 넣습니다.
     static void Atmosphere(Transform parent, List<Ctx> contexts)
     {
         EnsureFolder(VolumeFolder);
@@ -675,7 +688,6 @@ public static partial class StageBuilder
         }
         so.ApplyModifiedPropertiesWithoutUndo();
 
-        // 에디터에서 보이는 첫 모습(플레이하면 ZoneAtmosphere가 이어받음)
         Look f = contexts[0].look;
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Linear;
@@ -732,6 +744,7 @@ public static partial class StageBuilder
 
     // ───────────────────────── 메시 도구 ─────────────────────────
 
+    // facing이 0이면 감기 방향을 그대로 둠(호출한 쪽에서 맞춤)
     static Mesh GridMesh(string name, int nx, int ny, System.Func<int, int, Vector3> pos, System.Func<int, int, Vector2> uv, Vector3 facing)
     {
         int w = nx + 1;
@@ -758,11 +771,13 @@ public static partial class StageBuilder
             }
         }
 
-        // 면이 원하는 쪽(facing)을 보도록 감기 방향을 맞춥니다.
-        Vector3 n = Vector3.Cross(v[t[1]] - v[t[0]], v[t[2]] - v[t[0]]);
-        if (Vector3.Dot(n, facing) < 0f)
+        if (facing.sqrMagnitude > 0f)
         {
-            for (int q = 0; q < t.Length; q += 3) (t[q + 1], t[q + 2]) = (t[q + 2], t[q + 1]);
+            Vector3 n = Vector3.Cross(v[t[1]] - v[t[0]], v[t[2]] - v[t[0]]);
+            if (Vector3.Dot(n, facing) < 0f)
+            {
+                for (int q = 0; q < t.Length; q += 3) (t[q + 1], t[q + 2]) = (t[q + 2], t[q + 1]);
+            }
         }
 
         Mesh m = new Mesh { name = name };
@@ -792,7 +807,6 @@ public static partial class StageBuilder
         return m;
     }
 
-    // 울퉁불퉁한 바위 · 나무 수관 · 산 · 소행성 메시(6가지, 한 번 만들어 재사용)
     static Mesh RockMesh(int variant)
     {
         string path = $"{MeshFolder}/Rock_{variant}.asset";
@@ -953,7 +967,6 @@ public static partial class StageBuilder
         return Mathf.Lerp(Mathf.Lerp(a, b, u), Mathf.Lerp(c, d, u), v);
     }
 
-    // 텍스처(색 + 노멀맵)를 만들어 저장하고 머티리얼을 돌려줍니다. strata = 지층 무늬, speckle = 잔점
     static Material TexMat(string name, Color a, Color b, float scale, float strata, float speckle, float smoothness, float normalStrength)
     {
         const int size = 256;

@@ -39,11 +39,14 @@ public class ZoneAtmosphere : MonoBehaviour
 
     Material sky;
     Transform player;
+    CoursePath path;
+    int hint = -1;
 
     void Start()
     {
         Mover mover = FindAnyObjectByType<Mover>();
         player = mover != null ? mover.transform : null;
+        path = CoursePath.Get();
 
         if (skyboxTemplate != null)
         {
@@ -69,7 +72,8 @@ public class ZoneAtmosphere : MonoBehaviour
             return;
         }
 
-        float x = player.position.x;
+        // 꺾이는 길: 앞쪽 X 대신 '길을 따라 온 거리'로 구간을 판단
+        float x = path != null ? path.Progress(player.position, ref hint) : player.position.x;
         int i = 0;
         while (i + 1 < zones.Length && x >= zones[i + 1].startX)
         {

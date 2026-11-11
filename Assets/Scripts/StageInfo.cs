@@ -14,6 +14,8 @@ public class StageInfo : MonoBehaviour
     [SerializeField] TextMeshProUGUI hudStageText;
 
     Transform player;
+    CoursePath path;
+    int hint = -1;
     int current = -1;
     int lastBanner = -1;
     Coroutine showing;
@@ -31,6 +33,7 @@ public class StageInfo : MonoBehaviour
     {
         Mover mover = FindAnyObjectByType<Mover>();
         player = mover != null ? mover.transform : null;
+        path = CoursePath.Get();
 
         if (bannerText != null)
         {
@@ -39,7 +42,7 @@ public class StageInfo : MonoBehaviour
 
         if (player != null)
         {
-            current = IndexAt(player.position.x);
+            current = IndexAt(Progress());
             // 처음 시작이면 1스테이지 배너를 보여 주고, 체크포인트 부활이면 지금 구간 배너는 생략
             lastBanner = GameSession.HasCheckpoint ? current : -1;
             UpdateHud();
@@ -57,7 +60,7 @@ public class StageInfo : MonoBehaviour
             return;
         }
 
-        int idx = IndexAt(player.position.x);
+        int idx = IndexAt(Progress());
         if (idx == current)
         {
             return;
@@ -69,6 +72,12 @@ public class StageInfo : MonoBehaviour
         {
             ShowBanner(idx);
         }
+    }
+
+    // 꺾이는 길: 앞쪽 X 대신 '길을 따라 온 거리'
+    float Progress()
+    {
+        return path != null ? path.Progress(player.position, ref hint) : player.position.x;
     }
 
     int IndexAt(float x)

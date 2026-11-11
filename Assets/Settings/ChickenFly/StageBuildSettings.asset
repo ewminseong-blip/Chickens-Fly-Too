@@ -13,6 +13,12 @@ MonoBehaviour:
   m_Name: StageBuildSettings
   m_EditorClassIdentifier: Assembly-CSharp-Editor::StageBuildSettings
   deadlyBoundaries: 0
+  deadlyCeiling: 1
+  ceilingWarnDistance: 6
+  cloudRoofBelowHeight: 25
+  cloudRoofOffset: 0.3
+  checkpointEveryStages: 3
+  midStageCheckpoints: 0
   sizeBlend: 25
   holeSize: {x: 13, y: 8}
   crossSpeed: {x: 7, y: 15}
@@ -28,8 +34,8 @@ MonoBehaviour:
   cameraDamping: {x: 0.8, y: 0.5, z: 0.8}
   cameraPitch: 10
   cameraFov: 60
-  syncedLightningSpeed: 10
-  boostRingSpeed: 15
+  syncedLightningSpeed: 15
+  boostRingSpeed: 19
   bounceLaunchSpeed: 20
   cloudScale: 3.6
   cloudWallScale: {x: 4.5, y: 6.5}
@@ -38,16 +44,16 @@ MonoBehaviour:
   stages:
   - number: 1
     title: First Flap
-    hint: SPACE = FLAP   W = GO (hold to speed up)   S = STOP   MOUSE = TURN
+    hint: SPACE = FLAP   W = GO (hold to speed up)   SHIFT (hold) = DASH   S = STOP   MOUSE = TURN
     difficulty: 1
     width: 30
     height: 45
     path:
-    - {x: 30, y: 0, z: 0}
-    - {x: 60, y: 12, z: 12}
-    - {x: 40, y: 0, z: -22}
-    - {x: 50, y: 18, z: 0}
-    - {x: 35, y: 0, z: 14}
+    - {x: 40, y: 0, z: 0}
+    - {x: 80, y: 12, z: 12}
+    - {x: 50, y: 0, z: -22}
+    - {x: 65, y: 18, z: 0}
+    - {x: 45, y: 0, z: 14}
   - number: 2
     title: Growing Forest
     hint: Trees grow when you pass by
@@ -173,4 +179,4 @@ MonoBehaviour:
     - {x: 50, y: 15, z: 0}
     - {x: 30, y: 0, z: -10}
     - {x: 40, y: 0, z: 0}
-  stagesVersion: 6
+  stagesVersion: 7

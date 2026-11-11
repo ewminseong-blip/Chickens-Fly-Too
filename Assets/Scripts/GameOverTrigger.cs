@@ -65,8 +65,12 @@ public class GameOverTrigger : MonoBehaviour
         StartCoroutine(DeathSequence(otherObject));
     }
 
+    // 죽은 순간 원인을 알립니다(천장 경고가 "HIT THE CEILING!"을 띄우는 데 씀).
+    public static event System.Action<GameObject> Died;
+
     IEnumerator DeathSequence(GameObject hitObject)
     {
+        Died?.Invoke(hitObject);
         ChangeColor(gameOverColor);
 
         // 무엇에 죽었는지 보이도록 부딪힌 물체를 깜빡입니다.

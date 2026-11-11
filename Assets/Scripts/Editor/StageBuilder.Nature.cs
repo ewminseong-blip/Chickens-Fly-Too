@@ -22,19 +22,21 @@ public static partial class StageBuilder
 
         list.Add(new StageDef
         {
-            number = 1, title = "First Flap", hint = "SPACE = FLAP   W = GO (hold to speed up)   S = STOP   MOUSE = TURN", difficulty = 1f, zone = "Meadow",
+            number = 1, title = "First Flap", hint = "SPACE = FLAP   W = GO (hold to speed up)   SHIFT (hold) = DASH   S = STOP   MOUSE = TURN", difficulty = 1f, zone = "Meadow",
             width = 30f, height = 45f,
             content = ctx =>
             {
-                Sign(ctx, 10f, 12f, 0f, "SPACE : FLAP", 3f);
-                Sign(ctx, 22f, 8f, 0f, "HOLD W : FASTER", 2.4f);
-                RockGate(ctx, 45f, 2f, 2f + ctx.Hole, -12f, 12f);
-                RockGate(ctx, 110f, 13f, 13f + ctx.Hole, -12f, 12f);
-                Sign(ctx, 125f, 15f, 0f, "MOUSE : TURN", 3f);
-                RockGate(ctx, 150f, 3f, 25f, -14f, -14f + ctx.Hole);
-                RockGate(ctx, 182f, 3f, 25f, 14f - ctx.Hole, 14f);
+                // 속도 1.5배에 맞춰 구간 길이 ×1.3, 장애물 간격도 넓힘(215m → 280m)
+                Sign(ctx, 12f, 12f, 0f, "SPACE : FLAP", 3f);
+                Sign(ctx, 28f, 8f, 0f, "HOLD W : FASTER", 2.4f);
+                RockGate(ctx, 58f, 2f, 2f + ctx.Hole, -12f, 12f);
+                Sign(ctx, 92f, 11f, 0f, "HOLD SHIFT : DASH", 2.6f);
+                RockGate(ctx, 145f, 13f, 13f + ctx.Hole, -12f, 12f);
+                Sign(ctx, 162f, 15f, 0f, "MOUSE : TURN", 3f);
+                RockGate(ctx, 195f, 3f, 25f, -14f, -14f + ctx.Hole);
+                RockGate(ctx, 240f, 3f, 25f, 14f - ctx.Hole, 14f);
             }
-        }.Seg(30, 0).Seg(60, 12, 12).Seg(40, 0, -22).Seg(50, 18).Seg(35, 0, 14));
+        }.Seg(40, 0).Seg(80, 12, 12).Seg(50, 0, -22).Seg(65, 18).Seg(45, 0, 14));
 
         list.Add(new StageDef
         {
@@ -61,12 +63,24 @@ public static partial class StageBuilder
             width = 34f, height = 55f,
             content = ctx =>
             {
+                // 높이가 55m로 늘어난 만큼 '위로 넘어가면 끝'이 되지 않게 높은 곳에도 장애물을 둠.
+                // 상승풍을 타고 오르다 → 높이가 다른 틈을 차례로 통과(아래 → 위 → 가운데)
                 Wind(ctx, 22f, 78f, new Vector3(0f, ctx.Lift, 0f), false);
-                Flock(ctx, BirdKind.Eagle, 95f, 18f, true, 3);
+                RockGate(ctx, 40f, 6f, 6f + ctx.Hole + 2f, -15f, 15f);
+                RockGate(ctx, 62f, 24f, 24f + ctx.Hole + 2f, -15f, 15f);
+                Flock(ctx, BirdKind.Eagle, 82f, 14f, true, 3);
+                Flock(ctx, BirdKind.Eagle, 90f, 34f, false, 3);
+                RockGate(ctx, 100f, 14f, 14f + ctx.Hole + 2f, -10f, 10f);
                 Wind(ctx, 108f, 165f, new Vector3(0f, ctx.Lift * 0.9f, 0f), false);
+                // 바위 기둥 숲 + 기둥 사이 높은 곳의 걸린 바위 턱(위로만 피하면 막힘)
                 RockSpire(ctx, 125f, -7f, 4f); RockSpire(ctx, 140f, 7f, 4f); RockSpire(ctx, 155f, -2f, 4f);
+                NaturalBlock(ctx, Group(ctx, "Ledge_132"), 132f, 30f, 3f, new Vector3(3f, 5f, 22f));
+                NaturalBlock(ctx, Group(ctx, "Ledge_148"), 148f, 20f, -4f, new Vector3(3f, 5f, 22f));
+                NaturalBlock(ctx, Group(ctx, "Ledge_162"), 162f, 38f, 0f, new Vector3(3f, 6f, 34f));
                 Wind(ctx, 172f, 205f, new Vector3(0f, 0f, ctx.CrossWind), true);
                 RockSpire(ctx, 185f, 9f, 4f); RockSpire(ctx, 198f, 2f, 4f);
+                RockSpire(ctx, 191f, -10f, 4f);
+                HeadOnFlock(ctx, BirdKind.Eagle, 200f, 28f, 3);
                 Wind(ctx, 212f, 235f, new Vector3(0f, -ctx.Lift, 0f), false);
                 RockGate(ctx, 228f, 2f, 2f + ctx.Hole, -14f, 14f);
             }
@@ -78,10 +92,18 @@ public static partial class StageBuilder
             width = 30f, height = 50f,
             content = ctx =>
             {
-                RollingBoulder(ctx, 40f, 1f, 0f); RollingBoulder(ctx, 56f, -1f, 0.4f); RollingBoulder(ctx, 72f, 1f, 0.8f);
-                Rockfall(ctx, 88f, 100f, 132f, 7);
-                Flock(ctx, BirdKind.Eagle, 152f, 12f, true, 4);
-                Flock(ctx, BirdKind.Eagle, 174f, 20f, false, 4);
+                // 굴러오는 바위 5개(좌우 번갈아, 박자를 엇갈리게)
+                RollingBoulder(ctx, 34f, 1f, 0f); RollingBoulder(ctx, 46f, -1f, 0.35f); RollingBoulder(ctx, 58f, 1f, 0.7f);
+                RollingBoulder(ctx, 70f, -1f, 0.15f); RollingBoulder(ctx, 82f, 1f, 0.55f);
+                // 낙석 지대 1: 빠르게 떨어지고 계속 쏟아짐(14개)
+                Rockfall(ctx, 86f, 96f, 142f, 14);
+                // 높이가 다른 독수리 떼 3무리 + 마주 오는 떼
+                Flock(ctx, BirdKind.Eagle, 150f, 10f, true, 4);
+                Flock(ctx, BirdKind.Eagle, 162f, 26f, false, 4);
+                Flock(ctx, BirdKind.Eagle, 174f, 18f, true, 5);
+                HeadOnFlock(ctx, BirdKind.Eagle, 188f, 16f, 3);
+                // 낙석 지대 2 + 아래에서 굴러오는 바위(위아래 동시에)
+                Rockfall(ctx, 192f, 200f, 226f, 9);
                 RollingBoulder(ctx, 205f, -1f, 0.2f); RollingBoulder(ctx, 216f, 1f, 0.7f);
                 // 끝 무렵: 구름이 바닥까지 내려와 있음 = 구름 높이에 닿음(시즌1 구성)
                 for (float x = 228f; x < ctx.c.Length; x += 9f) CloudFloorRow(ctx, x);
@@ -295,6 +317,12 @@ public static partial class StageBuilder
     // 체크포인트: 옆 바위 위 작은 둥지와 알(지나가면 알이 초록으로 빛남)
     static void Checkpoint(Ctx ctx, float x, int order = -1)
     {
+        // 스테이지 중간 체크포인트(order 없음)는 설정에서 켰을 때만
+        if (order < 0 && !S.midStageCheckpoints)
+        {
+            return;
+        }
+
         ctx.checkpointCount++;
         if (order < 0) order = ctx.index * 100 + ctx.checkpointCount;
 
@@ -335,7 +363,14 @@ public static partial class StageBuilder
         block.transform.SetParent(parent, false);
         block.transform.position = center;
         block.transform.rotation = rot;
-        block.AddComponent<BoxCollider>().size = size;
+        BoxCollider box = block.AddComponent<BoxCollider>();
+        box.size = size;
+
+        // 보이는 모양 = 판정: 바위가 충돌 상자 밖으로 visualMargin(m) 넘게 튀어나오지 않게 축마다 크기 · 위치를 맞춤.
+        // (예전에는 바위가 상자보다 평균 1.4 ~ 2.6m, 최대 7m 튀어나와 '닿았는데 지나가지는' 곳이 생겼음)
+        const float rockR = 0.68f;        // 바위 메시 반지름(크기 1당, 울퉁불퉁 최대)
+        const float visualMargin = 0.3f;  // 보이는 가장자리가 판정보다 이만큼만 바깥(아주 작은 관용)
+        float thick = 0f;
 
         float s = Mathf.Clamp(Mathf.Min(size.y, size.z), 2.5f, 7f);
         int ny = Mathf.Max(1, Mathf.CeilToInt(size.y / (s * 0.8f)));
@@ -348,20 +383,35 @@ public static partial class StageBuilder
                     Random.Range(-0.3f, 0.3f),
                     (ny == 1 ? 0f : -size.y / 2f + size.y * (j + 0.5f) / ny) + Random.Range(-0.4f, 0.4f),
                     (nz == 1 ? 0f : -size.z / 2f + size.z * (k + 0.5f) / nz) + Random.Range(-0.4f, 0.4f));
-                Vector3 p = center + rot * local;
                 float sc = s * Random.Range(1.05f, 1.3f);
+
+                if (ctx.look.wall == WallStyle.Cloud)
+                {
+                    GameObject cloud = SpawnCloud(ctx, block.transform, center + rot * local, sc * 0.75f, false);
+                    if (cloud != null) thick = Mathf.Max(thick, 2f * FitInside(cloud, block.transform, size, visualMargin));
+                    continue;
+                }
+
+                // 바위 · 소행성: 축마다 크기를 상자에 맞추고(위아래는 메시가 0.85배 납작), 가장자리 바위는 안쪽으로
+                Vector3 sc3 = new Vector3(Mathf.Max(size.x * 1.6f, sc * 0.8f), sc, sc);
+                sc3.y = Mathf.Min(sc3.y, (size.y + 2f * visualMargin) / (2f * rockR * 0.85f));
+                sc3.z = Mathf.Min(sc3.z, (size.z + 2f * visualMargin) / (2f * rockR));
+                float ey = rockR * 0.85f * sc3.y, ez = rockR * sc3.z;
+                local.y = Mathf.Clamp(local.y, -Mathf.Max(0f, size.y / 2f + visualMargin - ey), Mathf.Max(0f, size.y / 2f + visualMargin - ey));
+                local.z = Mathf.Clamp(local.z, -Mathf.Max(0f, size.z / 2f + visualMargin - ez), Mathf.Max(0f, size.z / 2f + visualMargin - ez));
+                thick = Mathf.Max(thick, 2f * rockR * sc3.x + Mathf.Abs(local.x) * 2f);
+                Vector3 p = center + rot * local;
+                // 앞뒤로만 살짝 돌림(옆으로 크게 돌리면 두꺼운 축이 옆으로 가서 다시 튀어나옴)
+                Quaternion tilt = Quaternion.Euler(Random.Range(-6f, 6f), (Random.value < 0.5f ? 0f : 180f) + Random.Range(-6f, 6f), Random.Range(-6f, 6f));
 
                 switch (ctx.look.wall)
                 {
-                    case WallStyle.Cloud:
-                        SpawnCloud(ctx, block.transform, p, sc * 0.75f, false);
-                        break;
                     case WallStyle.Crystal:
                     {
                         GameObject r = MeshObject(block.transform, "Asteroid", RockMesh(Random.Range(0, 6)), ctx.obstacleMat);
                         r.transform.position = p;
-                        r.transform.rotation = Random.rotation;
-                        r.transform.localScale = new Vector3(Mathf.Max(size.x * 1.6f, sc * 0.8f), sc, sc);
+                        r.transform.rotation = rot * tilt;
+                        r.transform.localScale = sc3;
                         if (Random.value < 0.25f)
                         {
                             Material[] neon = NeonSet();
@@ -369,6 +419,9 @@ public static partial class StageBuilder
                             c.transform.position = p + Random.onUnitSphere * sc * 0.4f;
                             c.transform.rotation = Random.rotation;
                             c.transform.localScale = new Vector3(1f, 3f, 1f) * Random.Range(0.6f, 1f);
+                            // 튀어나온 수정도 보이는 대로 판정
+                            MeshCollider cc = c.AddComponent<MeshCollider>();
+                            cc.convex = true;
                         }
                         break;
                     }
@@ -376,13 +429,62 @@ public static partial class StageBuilder
                     {
                         GameObject r = MeshObject(block.transform, "Rock", RockMesh(Random.Range(0, 6)), ctx.obstacleMat);
                         r.transform.position = p;
-                        r.transform.rotation = rot * Quaternion.Euler(Random.Range(-15f, 15f), Random.Range(0f, 360f), Random.Range(-15f, 15f));
-                        r.transform.localScale = new Vector3(Mathf.Max(size.x * 1.6f, sc * 0.8f), sc, sc);
+                        r.transform.rotation = rot * tilt;
+                        r.transform.localScale = sc3;
                         break;
                     }
                 }
             }
         }
+
+        // 앞뒤 두께도 보이는 바위에 맞춤(조금 얇게 = 앞면을 스칠 때만 약간의 관용)
+        if (thick > 0f)
+        {
+            box.size = new Vector3(Mathf.Max(size.x, thick - 2f * visualMargin), size.y, size.z);
+        }
+    }
+
+    // 구름 덩어리를 상자(로컬 크기 size) 안에 들어가게 줄이고 옮김: 보이는 구름 가장자리가 판정 밖으로 margin 넘게 안 나오게
+    // 돌려주는 값: 앞뒤(x)로 가장 멀리 나간 거리(상자 두께를 구름에 맞추는 데 씀)
+    static float FitInside(GameObject cloud, Transform box, Vector3 size, float margin)
+    {
+        Renderer[] rs = cloud.GetComponentsInChildren<Renderer>();
+        if (rs.Length == 0) return 0f;
+        float reachX = 0f;
+        for (int pass = 0; pass < 2; pass++)
+        {
+            Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
+            foreach (Renderer r in rs)
+            {
+                Bounds b = r.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 corner = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    Vector3 l = box.InverseTransformPoint(corner);
+                    min = Vector3.Min(min, l);
+                    max = Vector3.Max(max, l);
+                }
+            }
+            Vector3 ext = (max - min) / 2f;
+            Vector3 lim = size / 2f + Vector3.one * margin;
+            reachX = Mathf.Max(Mathf.Abs(min.x), Mathf.Abs(max.x));
+            // 옆 · 위아래가 상자보다 크면 줄임(앞뒤 x는 두께라 그대로)
+            float k = Mathf.Min(1f, lim.y / Mathf.Max(0.01f, ext.y), lim.z / Mathf.Max(0.01f, ext.z));
+            if (pass == 0 && k < 1f)
+            {
+                cloud.transform.localScale *= k;
+                continue;
+            }
+            // 가장자리를 넘으면 안쪽으로 밀기
+            Vector3 shift = Vector3.zero;
+            if (max.y > lim.y) shift.y -= max.y - lim.y;
+            if (min.y < -lim.y) shift.y += -lim.y - min.y;
+            if (max.z > lim.z) shift.z -= max.z - lim.z;
+            if (min.z < -lim.z) shift.z += -lim.z - min.z;
+            cloud.transform.position += box.TransformVector(shift);
+            break;
+        }
+        return reachX;
     }
 
     // 틈이 있는 자연 벽: (y0~y1: 바닥에서 높이, z0~z1: 옆) 자리만 비어 있음. 범위는 그 위치의 폭 · 높이로 자름.
@@ -418,21 +520,58 @@ public static partial class StageBuilder
         tree.transform.position = ctx.c.P(x, 0f, ctx.c.ClampZ(x, z, 3f));
         tree.transform.localScale = Vector3.one * scale;
 
+        tree.transform.rotation = Quaternion.AngleAxis(Random.Range(0f, 360f), Vector3.up);
+
         GameObject trunk = Prim(PrimitiveType.Cylinder, tree.transform, "Trunk", bark, true);
         trunk.transform.localPosition = new Vector3(0f, 4f, 0f);
-        trunk.transform.localScale = new Vector3(1.4f, 4f, 1.4f);
+        trunk.transform.localScale = new Vector3(1.3f, 4f, 1.3f);
 
-        for (int b = 0; b < 3; b++)
-        {
-            GameObject crown = MeshObject(tree.transform, "Crown", RockMesh(Random.Range(0, 6)), b == 2 ? leaf2 : leaf);
-            crown.transform.localPosition = new Vector3(Random.Range(-0.7f, 0.7f), 9f + b * 1.8f, Random.Range(-0.7f, 0.7f));
-            float s = 6.5f - b * 1.4f;
-            crown.transform.localScale = new Vector3(s, s * 0.85f, s);
-        }
-        SphereCollider sc = tree.AddComponent<SphereCollider>();
-        sc.center = new Vector3(0f, 10f, 0f);
-        sc.radius = 2.6f;
+        const float k = 0.55f;
+        RoundCrown(tree.transform, k, 1.2f, leaf, leaf2);
+
+        // 보이는 잎보다 조금 작은 충돌(보이지 않는 관용): 잎 덩어리를 세로 캡슐 하나로.
+        // 구(Sphere)는 자라는 나무(가로 1.6 · 세로 2.4배)에서 반지름이 '가장 큰 배율(2.4)'로 커져
+        // 잎보다 훨씬 넓게 길을 막았음 → 캡슐은 반지름이 가로 배율, 높이가 세로 배율을 따름.
+        CapsuleCollider cc = tree.AddComponent<CapsuleCollider>();
+        cc.direction = 1;
+        cc.center = new Vector3(0f, 21f * k, 0f);
+        cc.radius = 3f;   // 잎 반지름 약 3.1 ~ 3.7m보다 조금 작게
+        cc.height = 8.5f;
         return tree.transform;
+    }
+
+    // 시즌1 Tree_1 프리팹의 잎 배치(매끈한 구 5개를 위로 쌓은 동글동글한 뭉게 모양)를 그대로 옮긴 값.
+    // 프리팹 루트 배율(2.38, 1.79, 2.01)을 곱해 둔 좌표 · 크기이고, k로 전체 크기, widen으로 옆 통통함을 조절합니다.
+    static readonly Vector3[] CrownPos =
+    {
+        new Vector3(0.93f, 17.45f, 0.44f),   // 아래 큰 덩어리
+        new Vector3(0.93f, 18.44f, -1.51f),
+        new Vector3(-1.52f, 20.26f, -0.58f),
+        new Vector3(0.93f, 21.30f, 0.76f),
+        new Vector3(-1.52f, 24.58f, -1.33f), // 맨 위 둥근 머리
+    };
+    static readonly Vector3[] CrownScale =
+    {
+        new Vector3(7.60f, 9.36f, 6.4f),
+        new Vector3(6.50f, 8.00f, 5.6f),
+        new Vector3(5.21f, 6.43f, 4.6f),
+        new Vector3(5.64f, 6.95f, 4.9f),
+        new Vector3(8.16f, 10.06f, 7.0f),
+    };
+
+    static void RoundCrown(Transform tree, float k, float widen, Material leaf, Material leaf2)
+    {
+        for (int b = 0; b < CrownPos.Length; b++)
+        {
+            // 구 기본 메시는 매끈해서 시즌1처럼 둥근 실루엣이 나옴(울퉁불퉁한 바위 메시 대신)
+            GameObject puff = Prim(PrimitiveType.Sphere, tree, $"Crown_{b}", b == 3 ? leaf2 : leaf, false);
+            Vector3 p = CrownPos[b] * k;
+            puff.transform.localPosition = new Vector3(p.x * widen, p.y, p.z * widen);
+            float jitter = Random.Range(0.92f, 1.08f);
+            Vector3 s = CrownScale[b] * k * jitter;
+            puff.transform.localScale = new Vector3(s.x * widen, s.y, s.z * widen);
+            puff.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+        }
     }
 
     static void GrowTriggerFor(Ctx ctx, float x, Transform target, Vector3 multiplier)
@@ -514,7 +653,7 @@ public static partial class StageBuilder
         float size = 5f;
         b.transform.position = ctx.c.P(x, size * 0.45f, -dir * (ctx.c.Half(x) + 6f));
         b.transform.localScale = Vector3.one * size;
-        b.AddComponent<SphereCollider>().radius = 0.4f;
+        b.AddComponent<SphereCollider>().radius = 0.55f;   // 보이는 크기와 거의 같게(예전 0.4 → 스쳐도 지나감)
         Cross(ctx, b, x, dir, ctx.CrossSpeed, ctx.CrossWait, phase, size * 0.45f, 0.08f);
     }
 
@@ -532,12 +671,17 @@ public static partial class StageBuilder
             GameObject r = MeshObject(g, $"FallingRock_{i}", RockMesh(Random.Range(0, 6)), ctx.obstacleMat);
             r.transform.position = ctx.c.P(x, ctx.c.VerticalHeight(x) - 1f, zs[i % zs.Length] * ctx.c.Width(x));
             r.transform.localScale = Vector3.one * Random.Range(3f, 4.2f);
-            r.AddComponent<SphereCollider>().radius = 0.4f;
+            // 바위 메시 반지름 0.5 ~ 0.68 → 0.55(보이는 크기와 거의 같게, 예전 0.4는 너무 작아 스쳐도 지나감)
+            r.AddComponent<SphereCollider>().radius = 0.55f;
             rocks.Add(r.transform);
         }
         SetField(drop, "targets", rocks.ToArray());
         SetField(drop, "interval", R(S.hailInterval, ctx.D01) * 1.5f);
         SetField(drop, "fallDistance", ctx.c.Height(fromX) + 6f);
+        // 낙석: 빠르게 시작해 점점 빨라지고, 다 떨어지면 다시 위에서 떨어짐(계속 쏟아지는 지대)
+        SetField(drop, "fallSpeed", S.rockfallSpeed);
+        SetField(drop, "fallAcceleration", S.rockfallAcceleration);
+        SetField(drop, "loop", true);
     }
 
     static void Hail(Ctx ctx, float triggerX, float fromX, float toX, int count)
@@ -698,7 +842,15 @@ public static partial class StageBuilder
         }
         bird.AddComponent<BirdFlap>();
 
-        if (hazard) bird.AddComponent<SphereCollider>().radius = 1.0f;
+        if (hazard)
+        {
+            // 몸통 + 머리만 감싸는 캡슐(날개 · 위아래 여백은 빼서 '안 닿은 것 같은데 죽는' 일이 없게, 보이지 않는 관용)
+            CapsuleCollider cap = bird.AddComponent<CapsuleCollider>();
+            cap.direction = 2;
+            cap.radius = 0.5f;
+            cap.height = 2.4f;
+            cap.center = new Vector3(0f, 0.15f, 0.25f);
+        }
         return bird;
     }
 

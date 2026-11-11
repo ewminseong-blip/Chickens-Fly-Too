@@ -654,14 +654,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bd1e6279695d99a4e916dd1329aaf5e9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveForce: 15
+  moveForce: 22.5
   jumpForce: 13
-  maxForwardSpeed: 10
-  topSpeed: 30
-  overdriveAcceleration: 2.8
-  maxBackwardSpeed: 4
-  coastDeceleration: 7
-  brakeDeceleration: 20
+  maxForwardSpeed: 15
+  topSpeed: 45
+  overdriveAcceleration: 3.57
+  dashBoost: 12.75
+  dashRampTime: 1
+  dashMaxHold: 2
+  dashRechargeTime: 2
+  overSpeedDeceleration: 8
+  dashFovKick: 10
+  maxBackwardSpeed: 6
+  ringExtraSpeed: 7.65
+  coastDeceleration: 4.5
+  slideGrip: 9
+  brakeDeceleration: 30
   maxWindDrift: 8
   windDriftDecay: 10
   minYAngle: -45

@@ -3,22 +3,53 @@ using UnityEngine;
 public class Mover : MonoBehaviour
 {
     // W를 누를 때 수평으로 빨라지는 정도(m/s²)
-    [SerializeField] float moveForce = 15f;
+    // (2026-11-11 속도 1.5배: 기본 · 최고 속도와 기본 가속은 ×1.5, '빨라지는 기믹'(W 계속 가속 · 대시 · 바람 고리)은 ×1.5에서 15% 낮춤)
+    [SerializeField] float moveForce = 22.5f;
     // 날갯짓 한 번의 힘(질량 1이면 세로 속도 +jumpForce m/s)
     [SerializeField] float jumpForce = 10f;
 
-    [Header("수평 이동 (미끄러짐 방지)")]
+    [Header("수평 이동")]
     [Tooltip("기본 속도(m/s): W를 누르면 여기까지는 빠르게(moveForce) 도달")]
-    [SerializeField] float maxForwardSpeed = 10f;
+    [SerializeField] float maxForwardSpeed = 15f;
     [Tooltip("최고 속도(m/s): W를 계속 누르고 있으면 기본 속도를 넘어 여기까지 점점 빨라짐(기본 속도의 3배)")]
-    [SerializeField] float topSpeed = 30f;
-    [Tooltip("기본 속도를 넘은 뒤의 가속(m/s²). 2.8이면 10 → 30m/s까지 약 7초")]
-    [SerializeField] float overdriveAcceleration = 2.8f;
-    [SerializeField] float maxBackwardSpeed = 4f;
-    // W를 뗐을 때 감속(m/s²). 10m/s에서 약 1.4초 만에 멈춥니다.
-    [SerializeField] float coastDeceleration = 7f;
-    // S 브레이크 감속(m/s²). 10m/s에서 약 0.5초 만에 멈춥니다.
-    [SerializeField] float brakeDeceleration = 20f;
+    [SerializeField] float topSpeed = 45f;
+    [Tooltip("기본 속도를 넘은 뒤의 가속(m/s²). 3.57이면 15 → 45m/s까지 약 8.4초")]
+    [SerializeField] float overdriveAcceleration = 3.57f;
+
+    [Header("대시 (Shift)")]
+    [Tooltip("Shift를 꾹 눌렀을 때 1초에 걸쳐 더해지는 속도(m/s)")]
+    [SerializeField] float dashBoost = 12.75f;
+    [Tooltip("Shift를 꾹 누르면 dashBoost까지 차오르는 데 걸리는 시간(초). 짧게 누르면 그만큼만 빨라짐")]
+    [SerializeField] float dashRampTime = 1f;
+    [Tooltip("한 번에 누르고 있을 수 있는 최대 시간(초). 게이지가 다 닳으면 대시가 끝남")]
+    [SerializeField] float dashMaxHold = 2f;
+    [Tooltip("게이지가 빈 상태에서 다 차기까지(초)")]
+    [SerializeField] float dashRechargeTime = 2f;
+    [Tooltip("대시를 놓은 뒤 최고 속도 위로 넘친 속도가 줄어드는 감속(m/s²). 작을수록 부드럽게 풀림")]
+    [SerializeField] float overSpeedDeceleration = 8f;
+    [Tooltip("대시가 다 찼을 때 넓어지는 시야(°)")]
+    [SerializeField] float dashFovKick = 10f;
+    float dashEnergy = 1f;     // 1 = 가득(2초 누를 수 있음), 0 = 빈
+    bool dashing;
+    bool dashHeld;
+    float dashBaseSpeed;       // 누르기 시작한 순간의 속도
+    float dashRamp;            // 0 ~ 1(1초에 걸쳐 차오름)
+    float dashKick;
+    public bool IsDashing => dashing;
+    public bool DashReady => !dashing && dashEnergy >= 0.25f;
+    // 게이지(HUD 막대): 1 = 가득
+    public float DashCharge => dashEnergy;
+    public event System.Action Dashed;
+    [SerializeField] float maxBackwardSpeed = 6f;
+    [Tooltip("바람 고리를 지날 때 지금 속도에 최소 이만큼 더함(m/s)")]
+    [SerializeField] float ringExtraSpeed = 7.65f;
+    // W를 뗐을 때 감속(m/s²). 4.5면 15m/s에서 약 3.3초 동안 미끄러지듯 날아감(시즌1은 공기 저항 0이라 계속 날아감).
+    [Tooltip("W를 뗐을 때 감속(m/s²). 작을수록 오래 미끄러지듯 날아감")]
+    [SerializeField] float coastDeceleration = 4.5f;
+    [Tooltip("방향을 튼 뒤 옆으로 미끄러지는 속도가 줄어드는 정도(m/s²). 작을수록 더 미끄러짐(얼음 · 관성), 크면 바로 꺾임")]
+    [SerializeField] float slideGrip = 9f;
+    // S 브레이크 감속(m/s²). 15m/s에서 약 0.5초 만에 멈춥니다.
+    [SerializeField] float brakeDeceleration = 30f;
 
     [Header("바람에 밀리는 속도")]
     // 바람이 수평으로 밀어 줄 수 있는 최대 속도(m/s)
@@ -226,7 +257,7 @@ public class Mover : MonoBehaviour
         // 속도감: 시야가 넓어지고 바람 줄이 많아짐
         if (cameraComponent != null)
         {
-            cameraComponent.fieldOfView = baseFov + speedFovBoost * speedFeel;
+            cameraComponent.fieldOfView = baseFov + speedFovBoost * speedFeel + dashFovKick * dashKick;
         }
         if (speedLines != null)
         {
@@ -238,6 +269,31 @@ public class Mover : MonoBehaviour
     void Update()
     {
         SetTargetAngle();
+
+        // 대시: Shift를 꾹 누르면 누르기 시작한 속도 + dashBoost까지 dashRampTime(1초)에 걸쳐 차오름.
+        // 누르는 동안 게이지가 닳고(dashMaxHold초), 떼면 다시 참.
+        dashHeld = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        bool canDash = respawnHoldTimer <= 0f && !InputLocked && !playerRigidbody.isKinematic;
+        if (!dashing && dashHeld && canDash && DashReady &&
+            (Input.GetKeyDown(KeyCode.LeftShift) || Input.GetKeyDown(KeyCode.RightShift)))
+        {
+            StartDash();
+        }
+        if (dashing)
+        {
+            dashEnergy -= Time.deltaTime / Mathf.Max(0.1f, dashMaxHold);
+            if (!dashHeld || !canDash || dashEnergy <= 0f)
+            {
+                dashEnergy = Mathf.Max(dashEnergy, 0f);
+                dashing = false;
+            }
+        }
+        else
+        {
+            dashEnergy = Mathf.MoveTowards(dashEnergy, 1f, Time.deltaTime / Mathf.Max(0.1f, dashRechargeTime));
+            dashRamp = 0f;
+        }
+        dashKick = Mathf.MoveTowards(dashKick, dashing ? dashRamp : 0f, Time.deltaTime * 2.5f);
 
         // 입력 버퍼: 잠깐 막힌 동안(부활 직후 · 반전 연출) 누른 날갯짓은 flapBufferTime 안에 풀리면 바로 나갑니다.
         if (Input.GetKeyDown(KeyCode.Space))
@@ -282,12 +338,38 @@ public class Mover : MonoBehaviour
         isViewFlipped = flipped;
     }
 
+    void StartDash()
+    {
+        dashing = true;
+        dashRamp = 0f;
+        dashBaseSpeed = Mathf.Max(horizontalSpeed, 0f);
+        FeedbackFX.Boost(transform.position, FacingDirection());
+        Dashed?.Invoke();
+    }
+
     // 바람 고리(부스트): duration초 동안 수평 속도를 speed 또는 '지금 속도 + 6' 중 큰 값까지(최고 속도의 1.25배 이내)
     public void Boost(float speed, float duration)
     {
-        boostSpeed = Mathf.Min(Mathf.Max(speed, horizontalSpeed + 6f), topSpeed * 1.25f);
+        boostSpeed = Mathf.Min(Mathf.Max(speed, horizontalSpeed + ringExtraSpeed), topSpeed * 1.25f);
         boostTimer = Mathf.Max(boostTimer, duration);
-        horizontalSpeed = Mathf.Max(horizontalSpeed, boostSpeed);
+        ApplyForwardSpeed(Mathf.Max(horizontalSpeed, boostSpeed));
+    }
+
+    // 앞으로 가는 수평 속도를 바로 바꿉니다. FixedUpdate가 매번 실제 속도에서 horizontalSpeed를 다시 읽으므로
+    // 변수만 바꾸면 효과가 사라집니다(부스트 · 대시 모두 이 함수로 실제 속도에 넣음). 세로 속도와 바람 밀림은 유지.
+    void ApplyForwardSpeed(float speed)
+    {
+        horizontalSpeed = speed;
+        if (playerRigidbody == null || playerRigidbody.isKinematic)
+        {
+            return;
+        }
+        Vector3 v = playerRigidbody.linearVelocity;
+        Vector3 facing = FacingDirection();
+        Vector3 current = new Vector3(v.x, 0f, v.z) - windDrift;
+        Vector3 slide = current - facing * Vector3.Dot(current, facing);   // 미끄러지던 옆 속도는 유지
+        Vector3 h = facing * speed + slide + windDrift;
+        playerRigidbody.linearVelocity = new Vector3(h.x, v.y, h.z);
     }
 
     // 바람 구역이 물리 프레임마다 부릅니다. 세로 성분은 바로 힘으로, 수평 성분은 밀림 속도로 처리합니다.
@@ -361,9 +443,12 @@ public class Mover : MonoBehaviour
         Vector3 velocity = playerRigidbody.linearVelocity;
 
         // 지난 프레임에 더한 바람 밀림을 빼고 조작 속도만 읽습니다.
+        // 앞(바라보는 방향) 성분과 옆 성분으로 나눕니다. 방향을 틀면 원래 가던 속도가 옆 성분으로 남아
+        // 바로 사라지지 않고 slideGrip만큼씩 줄어듭니다 = 시즌1처럼 미끄러지는 손맛(관성).
         Vector3 horizontal = new Vector3(velocity.x, 0f, velocity.z) - windDrift;
-        float speed = horizontal.magnitude;
-        horizontalSpeed = Vector3.Dot(horizontal, facing) < 0f ? -speed : speed;
+        horizontalSpeed = Vector3.Dot(horizontal, facing);
+        Vector3 slide = horizontal - facing * horizontalSpeed;
+        slide = Vector3.MoveTowards(slide, Vector3.zero, slideGrip * dt);
 
         if (boostTimer > 0f)
         {
@@ -374,6 +459,20 @@ public class Mover : MonoBehaviour
         float forwardLimit = boostTimer > 0f ? Mathf.Max(boostSpeed, topSpeed) : topSpeed;
         bool forwardKey = Input.GetKey(KeyCode.W);
         bool backKey = Input.GetKey(KeyCode.S);
+
+        // 대시 중: 목표 속도(시작 속도 + dashBoost × 차오름)로 부드럽게 끌어올림. 1초면 +dashBoost 전부.
+        float dashTarget = 0f;
+        if (dashing)
+        {
+            dashRamp = Mathf.MoveTowards(dashRamp, 1f, dt / Mathf.Max(0.05f, dashRampTime));
+            dashTarget = dashBaseSpeed + dashBoost * dashRamp;
+            forwardLimit = Mathf.Max(forwardLimit, dashTarget);
+            if (forwardKey)
+            {
+                // W도 누르고 있으면 기본 가속으로 오른 만큼 기준 속도도 따라 올라감
+                dashBaseSpeed = Mathf.Max(dashBaseSpeed, horizontalSpeed - dashBoost * dashRamp);
+            }
+        }
 
         if (forwardKey && !backKey)
         {
@@ -388,14 +487,22 @@ public class Mover : MonoBehaviour
                 ? Mathf.MoveTowards(horizontalSpeed, 0f, brakeDeceleration * dt)
                 : Mathf.MoveTowards(horizontalSpeed, -maxBackwardSpeed, moveForce * dt);
         }
-        else if (boostTimer <= 0f)
+        else if (boostTimer <= 0f && !dashing)
         {
             horizontalSpeed = Mathf.MoveTowards(horizontalSpeed, 0f, coastDeceleration * dt);
         }
 
+        if (dashing && !backKey && horizontalSpeed < dashTarget)
+        {
+            // 차오르는 목표를 따라감(목표 자체가 1초에 걸쳐 오르므로 갑자기 튀지 않음)
+            horizontalSpeed = Mathf.MoveTowards(horizontalSpeed, dashTarget, (dashBoost / Mathf.Max(0.05f, dashRampTime) + moveForce) * dt);
+        }
+
         if (horizontalSpeed > forwardLimit)
         {
-            horizontalSpeed = Mathf.MoveTowards(horizontalSpeed, forwardLimit, brakeDeceleration * dt);
+            // 대시 · 바람 고리가 끝나 최고 속도를 넘친 만큼은 부드럽게 풀고, S를 누르면 바로 브레이크
+            float decel = backKey ? brakeDeceleration : overSpeedDeceleration;
+            horizontalSpeed = Mathf.MoveTowards(horizontalSpeed, forwardLimit, decel * dt);
         }
 
         // 바람 밀림: 바람 안에서는 쌓이고, 밖에서는 서서히 사라집니다.
@@ -410,7 +517,7 @@ public class Mover : MonoBehaviour
         }
         windAcceleration = Vector3.zero;
 
-        Vector3 newHorizontal = facing * horizontalSpeed + windDrift;
+        Vector3 newHorizontal = facing * horizontalSpeed + slide + windDrift;
         playerRigidbody.linearVelocity = new Vector3(newHorizontal.x, velocity.y, newHorizontal.z);
     }
 }

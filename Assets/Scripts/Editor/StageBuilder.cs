@@ -30,7 +30,7 @@ public static partial class StageBuilder
     const string FeedbackSettingsPath = "Assets/Resources/FX/FeedbackSettings.asset";
 
     // 스테이지 기본값을 바꾸면 올립니다(설정 에셋의 스테이지 목록을 새 기본값으로 다시 채움).
-    const int StagesVersion = 6;
+    const int StagesVersion = 7;
 
     static StageBuildSettings S;
 
@@ -147,7 +147,8 @@ public static partial class StageBuilder
             contexts.Add(ctx);
 
             BuildSection(ctx);
-            if (!ctx.isFirst) Checkpoint(ctx, 4f, i * 100);
+            // 세이브 포인트: N스테이지마다(기본 3 → 4 · 7 · 10스테이지 시작)
+            if (!ctx.isFirst && i % Mathf.Max(1, S.checkpointEveryStages) == 0) Checkpoint(ctx, 4f, i * 100);
             def.content?.Invoke(ctx);
         }
 
@@ -497,6 +498,7 @@ public static partial class StageBuilder
         SetField(info, "stageTitles", titles);
         SetField(info, "stageHints", hints);
         new GameObject("GravityFlipDirector").AddComponent<GravityFlipDirector>();
+        new GameObject("DashHud").AddComponent<DashHud>();
 
         if (scoreT != null)
         {

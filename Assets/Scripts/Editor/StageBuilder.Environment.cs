@@ -166,6 +166,12 @@ public static partial class StageBuilder
                 break;
         }
 
+        // 천장이 낮은 구간(구름 통로 등)은 닿으면 죽는 천장을 구름 지붕으로 '보이게' 함
+        if (S.deadlyCeiling && ctx.def.height <= S.cloudRoofBelowHeight)
+        {
+            CloudRoof(ctx, env);
+        }
+
         if (look.cloudSea) CloudSea(ctx);
         Mountains(ctx, env);
         OutsideClouds(ctx, env);
@@ -311,16 +317,10 @@ public static partial class StageBuilder
 
         GameObject trunk = Prim(PrimitiveType.Cylinder, tree.transform, "Trunk", bark, false);
         trunk.transform.localPosition = new Vector3(0f, 2.5f, 0f);
-        trunk.transform.localScale = new Vector3(0.9f, 2.5f, 0.9f);
+        trunk.transform.localScale = new Vector3(0.85f, 2.5f, 0.85f);
 
-        int blobs = Random.Range(2, 4);
-        for (int b = 0; b < blobs; b++)
-        {
-            GameObject crown = MeshObject(tree.transform, "Crown", RockMesh(Random.Range(0, 6)), leaf);
-            crown.transform.localPosition = new Vector3(Random.Range(-0.8f, 0.8f), 5.5f + b * 1.6f, Random.Range(-0.8f, 0.8f));
-            float s = Random.Range(3.2f, 4.6f) - b * 0.6f;
-            crown.transform.localScale = new Vector3(s, s * 0.85f, s);
-        }
+        // 시즌1 나무처럼 매끈한 구를 위로 쌓은 둥근 잎(코스 안 나무와 같은 모양, 크기만 작게)
+        RoundCrown(tree.transform, 0.35f, 1.2f, leaf, leaf);
     }
 
     static void Tufts(Ctx ctx, Transform env)
@@ -382,9 +382,39 @@ public static partial class StageBuilder
                 for (float h = -2f; h < top + 6f; h += 8f)
                 {
                     float xx = x + Random.Range(-1.5f, 1.5f);
-                    Vector3 p = ctx.c.P(xx, h, side * (ctx.c.Half(xx) + Random.Range(5f, 8f)));
-                    SpawnCloud(ctx, g, p, Random.Range(S.cloudWallScale.x, S.cloudWallScale.y), false);
+                    GameObject cloud = SpawnCloud(ctx, g, ctx.c.P(xx, h, 0f), Random.Range(S.cloudWallScale.x, S.cloudWallScale.y), false);
+                    if (cloud == null) continue;
+                    // 구름 안쪽 가장자리가 경계(닿으면 막힘) 바로 바깥에 오게: 보이는 구름 속으로 들어가는 일이 없게
+                    // (예전엔 경계 안쪽으로 최대 3.1m 들어와 '닿았는데 지나가지는' 구름이 있었음)
+                    float r = CloudExtent(cloud).x;
+                    cloud.transform.position = ctx.c.P(xx, h, side * (ctx.c.Half(xx) + r + Random.Range(0.2f, 1.2f)));
                 }
+            }
+        }
+    }
+
+    // 구름 지붕: 보이지 않던 천장(닿으면 죽음) 바로 위에 구름을 깔아 "여기가 천장"이 눈에 보이게 합니다.
+    // 앞 구간보다 천장이 낮아지는 곳(sizeBlend 거리)부터 깔아서, 천장이 내려오는 것도 보입니다. 충돌은 없음(천장 막이 담당).
+    static void CloudRoof(Ctx ctx, Transform env)
+    {
+        if (ctx.cloudPrefab == null) return;
+        Transform g = new GameObject("CloudRoof").transform;
+        g.SetParent(env, false);
+        float start = ctx.isFirst ? 0f : -S.sizeBlend - 5f;
+        for (float x = start; x < ctx.c.Length + 1f; x += 7f)
+        {
+            float top = ctx.c.VerticalHeight(x);
+            float half = ctx.c.Half(x) + 6f;
+            for (float z = -half; z <= half; z += 7.5f)
+            {
+                float xx = x + Random.Range(-1.5f, 1.5f);
+                float zz = z + Random.Range(-1.5f, 1.5f);
+                float scale = Random.Range(S.cloudWallScale.x, S.cloudWallScale.y);
+                GameObject cloud = SpawnCloud(ctx, g, ctx.c.P(xx, top, zz), scale, false);
+                if (cloud == null) continue;
+                // 구름 아랫면이 천장(닿으면 죽음)에서 cloudRoofOffset만큼만 아래로 내려오게: 보이는 구름 = 천장
+                float below = CloudExtent(cloud).y;
+                cloud.transform.position = ctx.c.P(xx, top + below - S.cloudRoofOffset - Random.Range(0f, 0.3f), zz);
             }
         }
     }
@@ -501,9 +531,9 @@ public static partial class StageBuilder
         }
     }
 
-    static void SpawnCloud(Ctx ctx, Transform parent, Vector3 pos, float scale, bool keepColliders)
+    static GameObject SpawnCloud(Ctx ctx, Transform parent, Vector3 pos, float scale, bool keepColliders)
     {
-        if (ctx.cloudPrefab == null) return;
+        if (ctx.cloudPrefab == null) return null;
         GameObject c = (GameObject)PrefabUtility.InstantiatePrefab(ctx.cloudPrefab, parent.gameObject.scene);
         c.transform.SetParent(parent, false);
         c.transform.position = pos;
@@ -513,6 +543,23 @@ public static partial class StageBuilder
         {
             foreach (Collider col in c.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(col);
         }
+        return c;
+    }
+
+    // 구름 하나가 중심에서 얼마나 퍼져 있는지(m): (옆 반지름, 아래로 내려온 길이)
+    static Vector2 CloudExtent(GameObject cloud)
+    {
+        Renderer[] rs = cloud.GetComponentsInChildren<Renderer>();
+        if (rs.Length == 0) return Vector2.zero;
+        Vector3 c = cloud.transform.position;
+        float lateral = 0f, below = 0f;
+        foreach (Renderer r in rs)
+        {
+            Bounds b = r.bounds;
+            lateral = Mathf.Max(lateral, Mathf.Abs(b.min.x - c.x), Mathf.Abs(b.max.x - c.x), Mathf.Abs(b.min.z - c.z), Mathf.Abs(b.max.z - c.z));
+            below = Mathf.Max(below, c.y - b.min.y);
+        }
+        return new Vector2(lateral, below);
     }
 
     // ───────────────────────── 맵 전체 ─────────────────────────
@@ -533,7 +580,16 @@ public static partial class StageBuilder
         Barricade(g, course, course.Length + 1f, 1f, barricadeMat, "Barricade_Front");
 
         Boundaries(g, course, first.triggerMat);
-        TopWindBand(g, course, first.triggerMat);
+        if (S.deadlyCeiling)
+        {
+            // 천장이 위험하면: 바람 띠로 밀어내지 않고, 가까워질 때 화면 경고로 알려 줌
+            CeilingWarning warn = g.gameObject.AddComponent<CeilingWarning>();
+            SetField(warn, "warnDistance", S.ceilingWarnDistance);
+        }
+        else
+        {
+            TopWindBand(g, course, first.triggerMat);
+        }
         g.gameObject.AddComponent<StageBounds>();
         Atmosphere(g, contexts);
     }
@@ -565,6 +621,7 @@ public static partial class StageBuilder
     {
         bool deadly = S != null && S.deadlyBoundaries;
         string tag = deadly ? "Untagged" : "Boundary";
+        string topTag = S != null && S.deadlyCeiling ? "Untagged" : "Boundary";   // 천장: 기본은 닿으면 죽음
         Transform g = new GameObject("Boundaries").transform;
         g.SetParent(parent, false);
 
@@ -592,15 +649,38 @@ public static partial class StageBuilder
                 return course.P(s, course.VerticalHeight(sc), j == 0 ? -half : half);
             },
             (i, j) => Vector2.zero, Vector3.down);
-        BoundaryObject(g, "Boundary_Top", topMesh, tag);
+        BoundaryObject(g, "Boundary_Top", topMesh, topTag);
     }
 
     static void BoundaryObject(Transform parent, string name, Mesh mesh, string tag)
     {
         GameObject go = new GameObject(name);
         go.transform.SetParent(parent, false);
-        go.AddComponent<MeshCollider>().sharedMesh = mesh;
+        MeshCollider mc = go.AddComponent<MeshCollider>();
+        mc.sharedMesh = mesh;
+        // 마찰 0: 벽에 비비며 날아도 걸려서 멈추지 않고 미끄러져 지나가게(구석에 '막혀서 안 가지는' 느낌 방지)
+        mc.sharedMaterial = NoFrictionMaterial();
         go.tag = tag;
+    }
+
+    static PhysicsMaterial NoFrictionMaterial()
+    {
+        const string path = "Assets/Settings/ChickenFly/Boundary_NoFriction.physicMaterial";
+        PhysicsMaterial m = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(path);
+        if (m == null)
+        {
+            EnsureFolder("Assets/Settings/ChickenFly");
+            m = new PhysicsMaterial("Boundary_NoFriction")
+            {
+                dynamicFriction = 0f,
+                staticFriction = 0f,
+                frictionCombine = PhysicsMaterialCombine.Minimum,
+                bounciness = 0f,
+                bounceCombine = PhysicsMaterialCombine.Minimum
+            };
+            AssetDatabase.CreateAsset(m, path);
+        }
+        return m;
     }
 
     // 시즌1 Barricade 같은 바위 벽: 큰 판(충돌) + 울퉁불퉁한 바위들(모양)

@@ -36,6 +36,8 @@ public class ZoneAtmosphere : MonoBehaviour
     [SerializeField] float blend = 60f;
     [SerializeField] Light sun;
     [SerializeField] Material skyboxTemplate;
+    [Tooltip("켜면 길 거리 대신 닭의 높이(y)로 구간을 판단(Can Chicken Fly? 수직 등반)")]
+    [SerializeField] bool useHeight = false;
 
     Material sky;
     Transform player;
@@ -46,7 +48,12 @@ public class ZoneAtmosphere : MonoBehaviour
     {
         Mover mover = FindAnyObjectByType<Mover>();
         player = mover != null ? mover.transform : null;
-        path = CoursePath.Get();
+        if (player == null)
+        {
+            ClimbController climber = FindAnyObjectByType<ClimbController>();
+            if (climber != null) player = climber.transform;
+        }
+        path = useHeight ? null : CoursePath.Get();
 
         if (skyboxTemplate != null)
         {
@@ -73,7 +80,7 @@ public class ZoneAtmosphere : MonoBehaviour
         }
 
         // 꺾이는 길: 앞쪽 X 대신 '길을 따라 온 거리'로 구간을 판단
-        float x = path != null ? path.Progress(player.position, ref hint) : player.position.x;
+        float x = useHeight ? player.position.y : (path != null ? path.Progress(player.position, ref hint) : player.position.x);
         int i = 0;
         while (i + 1 < zones.Length && x >= zones[i + 1].startX)
         {

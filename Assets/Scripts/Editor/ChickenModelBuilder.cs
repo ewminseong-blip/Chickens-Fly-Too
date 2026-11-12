@@ -19,21 +19,20 @@ public static class ChickenModelBuilder
         try
         {
             // 1) 예전 부품 지우기(이름으로)
-            foreach (string n in new[] { "Sphere_1", "Sphere", "wing_1", "wing_2", "LeftFoot", "RightFoot", "Model" })
+            foreach (string n in new[] { "Sphere_1", "Sphere", "wing_1", "wing_2", "LeftFoot", "RightFoot", "Model", "Hitbox" })
             {
                 Transform old = root.transform.Find(n);
                 if (old != null) Object.DestroyImmediate(old.gameObject);
             }
 
-            // 루트 캡슐은 안 보이게(충돌 상자는 그대로 = 몸통 판정)
+            // 루트 캡슐은 안 보이게
             MeshRenderer rootRenderer = root.GetComponent<MeshRenderer>();
             if (rootRenderer != null) rootRenderer.enabled = false;
+            // 루트 상자 판정은 지움: 루트가 시즌1 그대로 Z -61° 기울어져 있어서 상자도 같이 기울어
+            // 옆에서 보면 마름모가 됐음 → 머리 앞 · 위와 몸 앞 아래가 판정 밖, 꼬리 쪽 빈 공간이 판정 안.
+            // 대신 모델과 같은 방향(똑바로 선)의 Hitbox 자식에 몸통 캡슐 + 머리 구를 둠(아래 4번).
             BoxCollider box = root.GetComponent<BoxCollider>();
-            if (box != null)
-            {
-                box.size = new Vector3(0.9f, 1.7f, 0.9f);   // 보이는 몸보다 살짝 작게
-                box.center = new Vector3(0f, 0.05f, 0f);
-            }
+            if (box != null) Object.DestroyImmediate(box, true);
 
             // 예전 날개 스크립트 대신 새 애니메이터
             WingMove oldWing = root.GetComponent<WingMove>();
@@ -53,6 +52,21 @@ public static class ChickenModelBuilder
             // 3) Model: 루트 기울기(Z -61.28°)를 되돌려 진행 방향 +X, 위 +Y로
             Transform model = Empty(root.transform, "Model", Vector3.zero);
             model.localRotation = Quaternion.Inverse(Quaternion.Euler(0f, 0f, root.transform.localEulerAngles.z));
+
+            // 4) 판정(Hitbox): 모델과 같은 방향. 보이는 몸 · 머리보다 살짝 작게(스치면 안 죽는 작은 관용),
+            //    날개 · 다리 · 꼬리 · 볏은 판정 없음(시즌1부터의 규칙). 애니메이션이 움직이지 않는 별도 자식이라 판정이 흔들리지 않음.
+            //    몸(Body) 보이는 크기: 앞뒤 1.6 · 높이 1.35 · 폭 1.3 / 머리(Head): 가운데 (0.66, 0.68), 지름 1.12
+            Transform hitbox = Empty(root.transform, "Hitbox", Vector3.zero);
+            hitbox.localRotation = model.localRotation;
+            hitbox.gameObject.tag = "Player";
+            CapsuleCollider bodyHit = hitbox.gameObject.AddComponent<CapsuleCollider>();
+            bodyHit.direction = 0;                       // 앞뒤(+X)로 긴 몸
+            bodyHit.radius = 0.6f;                       // 보이는 반높이 0.675 · 반폭 0.65보다 조금 작게
+            bodyHit.height = 1.5f;                       // 보이는 길이 1.6보다 조금 짧게
+            bodyHit.center = new Vector3(0f, -0.05f, 0f);
+            SphereCollider headHit = hitbox.gameObject.AddComponent<SphereCollider>();
+            headHit.center = new Vector3(0.66f, 0.68f, 0f);
+            headHit.radius = 0.5f;                       // 보이는 반지름 0.56보다 조금 작게
 
             // 몸
             Transform bodyPivot = Empty(model, "BodyPivot", Vector3.zero);
